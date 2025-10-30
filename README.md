@@ -21,6 +21,12 @@ in the `.env` file at the root of the project, you need to put the secrets:
 
 ```
 OPENAI_API_KEY=
-LANGFUSE_SECRET_KEY=
+LANGFUSE_SECRET_KEY=j
 LANGFUSE_PUBLIC_KEY=
+```
+
+## 3. Run chainlit app
+
+```
+chainlit run app.py -w
 ```
