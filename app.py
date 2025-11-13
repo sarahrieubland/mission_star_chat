@@ -21,6 +21,8 @@ from typing import Dict, Any, Optional
 import chainlit as cl
 from dotenv import load_dotenv
 
+from config import prompts
+
 # Modern LangChain imports
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -68,61 +70,14 @@ if LANGFUSE_AVAILABLE and LANGFUSE_API_KEY and LANGFUSE_PROJECT:
 # Output parser
 output_parser = StrOutputParser()
 
-# Prompt: extract STAR with confidences (few-shot)
-EXTRACTION_PROMPT = PromptTemplate.from_template(
-    """You are an assistant that converts a user's job-description into a STAR-format JSON object.
-Return ONLY valid JSON with the keys: situation, task, action, result.
-For each key return an object with `text` (string) and `confidence` (0.0-1.0).
-Be concise. If unknown, use an empty string and confidence 0.0.
-
-Example Input: "Led a cross-functional team to cut onboarding time by half by building a new checklist and training program."
-Example Output:
-{{
-  "situation": {{"text":"Onboarding process was slow and inconsistent.", "confidence":0.9}},
-  "task": {{"text":"Improve onboarding to reduce time and variability.", "confidence":0.9}},
-  "action": {{"text":"Built a checklist, created training materials, ran sessions with stakeholders.", "confidence":0.85}},
-  "result": {{"text":"Onboarding time reduced by ~50%.", "confidence":0.6}}
-}}
-
-Now convert this input to STAR JSON (with confidences):
-
-{input_text}"""
-)
+# Build prompt templates from the prompts module
+EXTRACTION_PROMPT = PromptTemplate.from_template(prompts.EXTRACTION_PROMPT_TEMPLATE)
+QUESTION_PROMPT = PromptTemplate.from_template(prompts.QUESTION_PROMPT_TEMPLATE)
+UPDATE_PROMPT = PromptTemplate.from_template(prompts.UPDATE_PROMPT_TEMPLATE)
 
 # Build chains using LCEL (LangChain Expression Language)
 EXTRACTION_CHAIN = EXTRACTION_PROMPT | llm | output_parser
-
-# Prompt to generate a single targeted clarifying question for a missing field
-QUESTION_PROMPT = PromptTemplate.from_template(
-    """You are a helpful assistant. Given the original user input:
-
-{input_text}
-
-and the current STAR draft:
-
-{star_json}
-
-Ask EXACTLY ONE concise, polite, and actionable question that would allow the user to fill the missing or weak field: {field}.
-If asking for numeric metrics, give examples (e.g., "percentage increase, time saved, number of users").
-Return the question only."""
-)
-
 QUESTION_CHAIN = QUESTION_PROMPT | llm | output_parser
-
-# Prompt to update a single field with new user answer
-UPDATE_PROMPT = PromptTemplate.from_template(
-    """You are an assistant. Update ONLY the `{field}` field in the STAR JSON below using the new user answer.
-Return the full STAR JSON (with text + confidence for each key) and do NOT change other fields.
-
-Original STAR:
-{star_json}
-
-New answer:
-{answer}
-
-Return valid JSON only."""
-)
-
 UPDATE_CHAIN = UPDATE_PROMPT | llm | output_parser
 
 # --- Utility functions ---
@@ -219,14 +174,14 @@ async def on_chat_start():
         "status": "new",
         "awaiting_field": None
     }
-    await cl.Message(content="Welcome — paste a short description of a past job/task and I'll help you craft a STAR entry.").send()
+    await cl.Message(content=prompts.WELCOME_MESSAGE).send()
 
 
 @cl.on_message
 async def main(message: cl.Message):
     session_id = cl.user_session.get("session_id")
     if not session_id or session_id not in SESSIONS:
-        await cl.Message("Session not found — start a new chat.").send()
+        await cl.Message(prompts.MSG_SESSION_NOT_FOUND).send()
         return
 
     session = SESSIONS[session_id]
@@ -236,7 +191,7 @@ async def main(message: cl.Message):
     if session.get("awaiting_field"):
         field = session["awaiting_field"]
         session["raw_inputs"].append({"role": "user", "content": text})
-        await cl.Message(f"Thanks — updating the `{field}` field...").send()
+        await cl.Message(prompts.MSG_UPDATING_FIELD.format(field=field)).send()
         updated = await update_star_field(field, session["star"], text)
         if updated:
             session["star"] = updated
@@ -246,20 +201,25 @@ async def main(message: cl.Message):
             if next_field:
                 q = await generate_followup_question("\n".join([r["content"] for r in session["raw_inputs"] if isinstance(r, dict)]), updated, next_field)
                 session["awaiting_field"] = next_field
-                await cl.Message(content=f"Updated. Current STAR draft:\n```json\n{json.dumps(updated, indent=2)}\n```\n\nFollow-up: {q}").send()
+                await cl.Message(content=prompts.RESPONSE_UPDATE_WITH_FOLLOWUP.format(
+                    star_json=json.dumps(updated, indent=2),
+                    question=q
+                )).send()
             else:
                 session["status"] = "complete"
-                await cl.Message(content=f"All done — final STAR:\n```json\n{json.dumps(updated, indent=2)}\n```\nYou can copy this JSON or edit any field.").send()
+                await cl.Message(content=prompts.RESPONSE_COMPLETE.format(
+                    star_json=json.dumps(updated, indent=2)
+                )).send()
         else:
-            await cl.Message("Sorry, I couldn't parse the assistant's update. Please rephrase your answer.").send()
+            await cl.Message(prompts.MSG_UPDATE_PARSE_ERROR).send()
         return
 
     # Otherwise this is an initial job description or a new item
     session["raw_inputs"].append({"role": "user", "content": text})
-    await cl.Message("Thanks — creating a STAR draft...").send()
+    await cl.Message(prompts.MSG_CREATING_DRAFT).send()
     draft = await extract_star(text)
     if not draft:
-        await cl.Message("Couldn't parse a STAR draft from the model. Try rephrasing the description.").send()
+        await cl.Message(prompts.MSG_PARSE_ERROR).send()
         return
 
     session["star"] = draft
@@ -270,10 +230,16 @@ async def main(message: cl.Message):
     if missing:
         q = await generate_followup_question(text, draft, missing)
         session["awaiting_field"] = missing
-        await cl.Message(content=f"Here's the draft I created:\n```json\n{json.dumps(draft, indent=2)}\n```\n\nI have one quick question to improve the `{missing}` field:\n{q}").send()
+        await cl.Message(content=prompts.RESPONSE_WITH_FOLLOWUP.format(
+            star_json=json.dumps(draft, indent=2),
+            field=missing,
+            question=q
+        )).send()
     else:
         session["status"] = "complete"
-        await cl.Message(content=f"All set — STAR draft:\n```json\n{json.dumps(draft, indent=2)}\n```\nIf you want to improve any field, just reply and say e.g. 'edit result: ...' or answer the follow-up.").send()
+        await cl.Message(content=prompts.RESPONSE_DRAFT_COMPLETE.format(
+            star_json=json.dumps(draft, indent=2)
+        )).send()
 
 # --- Small helper CLI endpoint for quick testing (optional) ---
 if __name__ == "__main__":

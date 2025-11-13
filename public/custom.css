@@ -1,0 +1,25 @@
+/* Force the main app container to use flexbox layout */
+#root {
+    display: flex !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+}
+
+/* Target the main content area - adjust the max-width */
+#root > div {
+    max-width: 50vw !important;
+    width: 50vw !important;
+    flex-shrink: 0 !important;
+}
+
+/* Ensure the chat messages container stays in left half */
+[data-testid="chat-message-container"],
+div[class*="chat"] {
+    max-width: 100% !important;
+}
+
+/* Keep input area in left half */
+form {
+    max-width: 100% !important;
+}

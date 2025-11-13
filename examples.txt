@@ -1,0 +1,22 @@
+Je m’occupe de faire de la data et des modèles pour aider l’entreprise. J’analyse les données et je fais des rapports pour les chefs. J’ai aussi travaillé sur plusieurs projets avec d’autres départements et j’ai utilisé différents outils de data science.
+
+J’ai fait du nettoyage de données et du machine learning.
+
+J’ai utilisé Python et SQL pour traiter des fichiers.
+
+J’ai créé des modèles pour des cas d’usage différents.
+
+J’ai fait des dashboards pour montrer les résultats.
+
+J’ai travaillé avec les équipes marketing et IT.
+
+J’ai contribué à plusieurs projets et j’ai amélioré les performances mais sans chiffres précis. J’ai aussi participé à des réunions pour parler des données et expliquer les modèles.
+
+Outils utilisés : Python, SQL, Excel, machine learning, data.
+
+
+------------
+
+ma mission est pour l'etat de geneve. Je travaille sur des chabot avec systeme RAG. 
+Le projet permet de faire gagner du temps aux collaborateurs
+
