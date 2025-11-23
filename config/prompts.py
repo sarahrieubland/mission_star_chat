@@ -4,51 +4,61 @@ Modèles de prompts pour l'agent chatbot STAR.
 """
 
 # --- Agent System Prompt ---
-AGENT_SYSTEM_PROMPT = """Vous êtes un coach de carrière expert qui aide les utilisateurs à créer des entrées au format STAR (Situation, Tâche, Action, Résultat) pour leurs expériences professionnelles.
+AGENT_SYSTEM_PROMPT = """Vous êtes un assistant expert pour un entreprise de consultants, qui aide les collaborateurs 
+de l'entreprise à créer des entrées au format STAR (Situation, Tâche, Action, Résultat) sur leur missons chez des clients 
+et sur leurs expériences professionnelles passées.
 
 Votre objectif est de guider les utilisateurs dans la création d'entrées STAR complètes et détaillées en :
 1. Extrayant la structure STAR initiale à partir de leurs descriptions
 2. Identifiant les champs manquants ou faibles
 3. Posant des questions de suivi ciblées pour améliorer l'entrée
 4. Mettant à jour les champs avec de nouvelles informations
-5. Fournissant l'entrée STAR finale polie
+5. Fournissant l'entrée STAR finale polie"""
 
-**Flux de travail :**
-- Quand un utilisateur fournit une description de poste, utilisez extract_star_from_description
-- Vérifiez l'exhaustivité avec check_star_completeness
-- Si des champs sont manquants ou faibles, utilisez generate_clarifying_question pour poser UNE question à la fois
-- Quand l'utilisateur fournit des informations supplémentaires, utilisez update_star_field_tool
-- Continuez jusqu'à ce que tous les champs aient un contenu solide avec des métriques (surtout pour Résultat)
-- Présentez le STAR final dans un format clair et professionnel
+# **Flux de travail :**
+# - Quand un utilisateur fournit une description de poste, utilisez extract_star_from_description
+# - Vérifiez l'exhaustivité avec check_star_completeness
+# - Si des champs sont manquants ou faibles, utilisez generate_clarifying_question pour poser UNE question à la fois
+# - Quand l'utilisateur fournit des informations supplémentaires, utilisez update_star_field_tool
+# - Continuez jusqu'à ce que tous les champs aient un contenu solide avec des métriques (surtout pour Résultat)
+# - Présentez le STAR final dans un format clair et professionnel
 
-**Important :**
-- Posez seulement UNE question à la fois
-- Priorisez l'obtention de résultats quantifiables (chiffres, pourcentages, métriques)
-- Soyez conversationnel et encourageant
-- Montrez le brouillon STAR actuel quand vous demandez des améliorations
-- Une fois terminé, félicitez l'utilisateur et montrez l'entrée finale polie
-
-Le contexte de la session actuelle est maintenu dans l'historique de conversation."""
+# **Important :**
+# - Posez seulement UNE question à la fois
+# - Priorisez l'obtention de résultats quantifiables (chiffres, pourcentages, métriques)
+# - Soyez conversationnel et encourageant
+# - Montrez le brouillon STAR actuel quand vous demandez des améliorations
+# - Une fois terminé, félicitez l'utilisateur et montrez l'entrée finale polie
 
 
-# Prompt : extraire STAR avec niveaux de confiance (few-shot)
-EXTRACTION_PROMPT_TEMPLATE = """Vous êtes un assistant qui convertit la description d'un travail ou d'une tâche de l'utilisateur en un objet JSON au format STAR.
-Retournez UNIQUEMENT du JSON valide avec les clés : situation, task, action, result.
-Pour chaque clé, retournez un objet avec `text` (chaîne de caractères) et `confidence` (0.0-1.0).
-Soyez concis. Si l'information est inconnue, utilisez une chaîne vide et une confiance de 0.0.
+# Prompt : extraire STAR 
+EXTRACTION_PROMPT_TEMPLATE = """
+Vous êtes un assistant qui transforme une description de mission ou de travail en un objet JSON 
+structuré selon le modèle STAR (Situation, Task, Action, Result).
 
-Exemple d'entrée : "J'ai dirigé une équipe interfonctionnelle pour réduire de moitié le temps d'intégration en créant une nouvelle liste de contrôle et un programme de formation."
+Consignes :
+- Retournez UNIQUEMENT du JSON valide, sans texte additionnel.
+- Le JSON doit contenir exactement les clés suivantes : "situation", "task", "action", "result".
+- Chaque clé doit contenir une chaîne de caractères bien formulée et n'exédant pas 2-3 phrases.
+- Si une information n'est pas mentionnée, laissez la valeur vide ("").
+- Évitez toute reformulation inutile : soyez précis, factuel et synthétique.
+
+Exemple d'entrée :
+"J'ai piloté la refonte du système d'information logistique d'un grand groupe de distribution,
+en coordonnant les équipes techniques et métiers, et en assurant la mise en production dans les délais."
+
 Exemple de sortie :
-{{
-  "situation": {{"text":"Le processus d'intégration était lent et incohérent.", "confidence":0.9}},
-  "task": {{"text":"Améliorer l'intégration pour réduire le temps et la variabilité.", "confidence":0.9}},
-  "action": {{"text":"Création d'une liste de contrôle, élaboration de supports de formation, organisation de sessions avec les parties prenantes.", "confidence":0.85}},
-  "result": {{"text":"Temps d'intégration réduit d'environ 50%.", "confidence":0.6}}
-}}
+{
+  "situation": "Le système d'information logistique du client était obsolète et mal intégré aux autres outils.",
+  "task": "Piloter la refonte du système d'information pour améliorer la fiabilité et l'efficacité opérationnelle.",
+  "action": "Coordination des équipes techniques et métiers, suivi du planning et du budget, pilotage du déploiement et des tests.",
+  "result": "Mise en production réussie dans les délais, amélioration de la performance logistique et satisfaction du client."
+}
 
-Maintenant, convertissez cette entrée en JSON au format STAR (avec niveaux de confiance) :
+Maintenant, convertissez cette entrée en JSON au format STAR :
 
-{input_text}"""
+{input_text}
+"""
 
 # Prompt pour générer une seule question de clarification ciblée pour un champ manquant
 QUESTION_PROMPT_TEMPLATE = """Vous êtes un assistant serviable. Étant donné la saisie originale de l'utilisateur :

@@ -1,21 +1,28 @@
 import chainlit as cl
-from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
-# Initialize OpenAI client
-client = AsyncOpenAI()
+# Initialize LangChain ChatOpenAI
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+
+@cl.on_chat_start
+async def start():
+    await cl.Message(
+        content="""Bienvenu! Pour vous aider à generer la description de votre mission au format STAR, 
+        veuillez tout d'abord décrire votre role et votre l'employeur (ou client) pour cette mission."""
+    ).send()
 
 @cl.on_message
 async def main(message: cl.Message):
-    # Call OpenAI to generate a response
-    response = await client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": message.content}
-        ]
-    )
+    # Use LangChain to generate a response
+    messages = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content=message.content)
+    ]
     
-    llm_output = response.choices[0].message.content
+    # Call the LLM
+    response = await llm.ainvoke(messages)
+    llm_output = response.content
     
     # Create editable text area using CustomElement
     elem = cl.CustomElement(
@@ -29,6 +36,6 @@ async def main(message: cl.Message):
     
     # Send as a regular message so it stays visible
     await cl.Message(
-        content="Here's the generated response (editable on the right):",
+        content="Voici un brouillon de la description de votre mission au format STAR (à droite):",
         elements=[elem]
     ).send()

@@ -20,3 +20,24 @@ Outils utilisés : Python, SQL, Excel, machine learning, data.
 ma mission est pour l'etat de geneve. Je travaille sur des chabot avec systeme RAG. 
 Le projet permet de faire gagner du temps aux collaborateurs
 
+------------
+
+Voici un exemple complet et concis d’une **description de mission** pour un **chef de projet informatique** dans une **entreprise de conseil française**, rédigée selon le modèle **STAR** :
+
+---
+
+**Mission : Chef de projet – Transformation du système d’information chez un acteur de la distribution**
+
+**Situation :**
+Le client, un grand groupe de distribution, faisait face à une obsolescence de son système de gestion des stocks et à une faible interopérabilité entre ses outils logistiques et financiers. Cette situation entraînait des ruptures de stock fréquentes et un manque de visibilité sur les marges opérationnelles.
+
+**Tâche :**
+En tant que chef de projet au sein de l’équipe de conseil, ma mission était de piloter la refonte du système d’information logistique, depuis la phase de cadrage jusqu’au déploiement national, tout en assurant la coordination entre les équipes métiers, techniques et les prestataires externes.
+
+**Actions :**
+J’ai animé les ateliers de recueil des besoins avec les directions métiers, rédigé les spécifications fonctionnelles et établi la feuille de route du projet (budget, planning, ressources). J’ai mis en place une gouvernance projet agile, favorisant des points d’avancement hebdomadaires et une communication fluide entre les parties prenantes. Enfin, j’ai supervisé les phases de tests utilisateurs, la formation des équipes et le déploiement progressif du nouvel outil dans 120 entrepôts.
+
+**Résultats :**
+Le projet a été livré dans les délais et respecté le budget initial. Le nouveau système a permis une réduction de 25 % des ruptures de stock et une amélioration de 30 % de la fiabilité des prévisions logistiques. La satisfaction des utilisateurs internes a atteint 92 % selon l’enquête post-déploiement, consolidant la relation du cabinet avec le client pour de futures missions de modernisation IT.
+
+---
