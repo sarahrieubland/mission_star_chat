@@ -6,20 +6,58 @@ export default function EditableText() {
   const initialText = typeof props !== 'undefined' && props.initial ? props.initial : '';
   const [text, setText] = useState(initialText);
   const [saved, setSaved] = useState(false);
+  const [hasEdited, setHasEdited] = useState(false);
+
+  // Only update from props if user hasn't edited yet
+  useEffect(() => {
+    if (!hasEdited && props.initial) {
+      setText(props.initial);
+    }
+  }, [props.initial, hasEdited]);
+
+  const handleTextChange = (e) => {
+    setText(e.target.value);
+    setHasEdited(true);
+  };
 
   useEffect(() => {
-    // Inject CSS to constrain the main app
+    // Inject CSS to constrain the main app and hide save messages
     const style = document.createElement('style');
     style.innerHTML = `
       #root {
         max-width: 50vw !important;
         width: 50vw !important;
       }
+      
+      /* Hide messages that start with SAVE_STAR_TEXT from chat history */
+      .step:has([class*="content"]:first-child):has([class*="content"] > div > p:first-child) {
+        &:has(p:first-child:is(:first-letter)) {
+          /* Check if message starts with SAVE_STAR_TEXT */
+        }
+      }
+      
+      /* More aggressive - hide any message containing SAVE_STAR_TEXT */
+      [class*="message"]:has(*:contains("SAVE_STAR_TEXT")),
+      .step:has(*:contains("SAVE_STAR_TEXT")) {
+        display: none !important;
+      }
     `;
     document.head.appendChild(style);
     
+    // Also actively remove SAVE_STAR_TEXT messages from DOM
+    const observer = new MutationObserver(() => {
+      document.querySelectorAll('[class*="message"], .step').forEach(el => {
+        if (el.textContent.includes('SAVE_STAR_TEXT:')) {
+          el.style.display = 'none';
+        }
+      });
+    });
+    
+    observer.observe(document.body, { childList: true, subtree: true });
+    
     return () => {
       document.head.removeChild(style);
+      observer.disconnect();
     };
   }, []);
 
@@ -29,10 +67,13 @@ export default function EditableText() {
     
     // Find the chat input and submit button
     const chatInput = document.querySelector('textarea[placeholder*="message"]') || 
-                      document.querySelector('textarea') ||
-                      document.querySelector('input[type="text"]');
+                      document.querySelector('textarea[placeholder*="Message"]') ||
+                      document.querySelector('form textarea');
     
     if (chatInput) {
+      // Store original value
+      const originalValue = chatInput.value;
+      
       // Set the value with our save prefix
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
@@ -40,22 +81,44 @@ export default function EditableText() {
       ).set;
       nativeInputValueSetter.call(chatInput, `SAVE_STAR_TEXT:${text}`);
       
-      // Trigger change event
-      const event = new Event('input', { bubbles: true });
-      chatInput.dispatchEvent(event);
+      // Trigger input event
+      const inputEvent = new Event('input', { bubbles: true });
+      chatInput.dispatchEvent(inputEvent);
       
-      // Find and click submit button
-      setTimeout(() => {
-        const submitButton = document.querySelector('button[type="submit"]') ||
-                           document.querySelector('button[aria-label*="Send"]') ||
-                           Array.from(document.querySelectorAll('button')).find(btn => 
-                             btn.textContent.includes('Send') || btn.querySelector('svg')
-                           );
-        
-        if (submitButton) {
-          submitButton.click();
+      // Trigger change event as well
+      const changeEvent = new Event('change', { bubbles: true });
+      chatInput.dispatchEvent(changeEvent);
+      
+      // Find submit button
+      const form = chatInput.closest('form');
+      let submitButton = null;
+      
+      if (form) {
+        submitButton = form.querySelector('button[type="submit"]');
+      }
+      
+      if (!submitButton) {
+        submitButton = chatInput.parentElement?.querySelector('button[type="submit"]') ||
+                      chatInput.parentElement?.querySelector('button svg')?.closest('button');
+      }
+      
+      if (submitButton) {
+        // Submit the form programmatically instead of clicking
+        if (form) {
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+          form.dispatchEvent(submitEvent);
         }
-      }, 100);
+        
+        // Also try clicking as fallback
+        submitButton.click();
+        
+        // Immediately restore original value
+        requestAnimationFrame(() => {
+          nativeInputValueSetter.call(chatInput, originalValue);
+          const clearEvent = new Event('input', { bubbles: true });
+          chatInput.dispatchEvent(clearEvent);
+        });
+      }
     }
   };
 
@@ -71,21 +134,30 @@ export default function EditableText() {
         backgroundColor: 'var(--background)'
       }}
     >
-      <div className="flex flex-col w-full border rounded-lg p-4 shadow-lg" style={{ backgroundColor: 'var(--background)' }}>
+      <div className="flex flex-col w-full border rounded-lg p-4 shadow-lg" style={{ backgroundColor: 'var(--background)', position: 'relative' }}>
+        {saved && (
+          <div style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            padding: '8px 16px',
+            backgroundColor: '#10b981',
+            color: 'white',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '500',
+            zIndex: 10,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+          }}>
+            ✓ Saved
+          </div>
+        )}
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold">Edit Response</h3>
-          {saved && (
-            <span className="text-sm font-medium px-3 py-1 rounded-md" style={{ 
-              backgroundColor: '#10b981', 
-              color: 'white' 
-            }}>
-              ✓ Saved
-            </span>
-          )}
         </div>
         <Textarea
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={handleTextChange}
           className="flex-1 resize-none mb-4"
         />
         <div className="flex justify-end gap-2">

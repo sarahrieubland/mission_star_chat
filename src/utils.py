@@ -1,4 +1,5 @@
 
+import re
 import json
 
 
@@ -48,6 +49,23 @@ def star_json_to_txt(json_str: str) -> str:
 def star_txt_to_json(text_str: str) -> dict:
     """Function to take the saved text from the user and put it back into json format"""
 
-    json_star = dict()
+    # Regex to capture the four sections
+    pattern = (
+        r"Situation:\s*(.*?)\s*"
+        r"Tâche:\s*(.*?)\s*"
+        r"Action:\s*(.*?)\s*"
+        r"Résultat:\s*(.*)"
+    )
 
-    return json_star
+    match = re.search(pattern, text_str, flags=re.DOTALL)
+    if not match:
+        return None
+
+    situation, task, action, result = match.groups()
+
+    return {
+        "Situation": situation.strip(),
+        "Tasks": task.strip(),
+        "Action": action.strip(),
+        "Results": result.strip()
+    }
