@@ -12,6 +12,7 @@ Features:
 - Workflow continues after user saves edits (without regenerating text)
 - Text format follows star_json_to_txt() format consistently
 - LangSmith integration for tracing and monitoring
+- LangSmith Hub for prompt management and versioning
 """
 
 import asyncio
@@ -21,32 +22,42 @@ import uuid
 from typing import TypedDict, Literal, Optional
 from functools import wraps
 
+# Load environment variables from .env file FIRST
+from dotenv import load_dotenv
+load_dotenv()
+
 import chainlit as cl
 from langsmith import Client
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
-from config import prompts
 from src.utils import star_json_to_txt, star_txt_to_json, build_star_from_components
 
-from dotenv import load_dotenv
-load_dotenv()
+# Import local prompts as fallback
+from config import prompts as local_prompts
+
 
 # --- Environment & Configuration ---
 MODEL_NAME = os.getenv("POC_MODEL", "gpt-4o-mini")
 TEMPERATURE = float(os.getenv("POC_TEMP", "0.0"))
 VERBOSE = os.getenv("VERBOSE", "true").lower() == "true"
 
+# LangSmith Hub configuration
+# Set your LangSmith handle (username) here or in .env
+LANGSMITH_HANDLE = os.getenv("LANGSMITH_HANDLE", "")  # e.g., "your-username"
+USE_HUB_PROMPTS = os.getenv("USE_HUB_PROMPTS", "true").lower() == "true"
+
 # --- LangSmith Configuration ---
 os.environ.setdefault("LANGSMITH_TRACING", "true")
 
-# Initialize LangSmith client for additional operations (optional)
+# Initialize LangSmith client
 try:
     ls_client = Client()
     if VERBOSE:
         print("✅ LangSmith client initialized")
         print(f"   Project: {os.getenv('LANGSMITH_PROJECT', 'default')}")
+        print(f"   Hub Handle: {LANGSMITH_HANDLE or 'Not set'}")
 except Exception as e:
     ls_client = None
     if VERBOSE:
@@ -56,7 +67,6 @@ except Exception as e:
 user_id = f"user-{uuid.uuid4()}"
 
 # Initialize LangChain OpenAI client
-# LangSmith will automatically trace all calls made through this client
 llm = ChatOpenAI(
     model=MODEL_NAME,
     temperature=TEMPERATURE,
@@ -64,6 +74,200 @@ llm = ChatOpenAI(
 
 # Registry for custom event handlers
 _event_handlers = {}
+
+
+# --- Prompt Management ---
+
+class PromptManager:
+    """Manages prompts from LangSmith Hub with local fallback.
+    
+    Uses the LangSmith client directly for pull_prompt and push_prompt operations.
+    """
+    
+    def __init__(self, handle: str = "", use_hub: bool = True, client: Client = None):
+        self.handle = handle
+        self.use_hub = use_hub and bool(handle)
+        self.client = client
+        self._cache = {}
+        
+        if VERBOSE:
+            if self.use_hub:
+                print(f"📝 PromptManager: Using LangSmith Hub (handle: {handle})")
+            else:
+                print(f"📝 PromptManager: Using local prompts (Hub disabled or no handle)")
+    
+    def _get_hub_prompt_name(self, prompt_name: str) -> str:
+        """Get the full hub prompt name with handle."""
+        return f"{self.handle}/{prompt_name}"
+    
+    def get_prompt(self, prompt_name: str, fallback: str = "") -> str:
+        """
+        Get a prompt from LangSmith Hub or fall back to local.
+        
+        Args:
+            prompt_name: Name of the prompt in the hub (e.g., "star-situation-prompt")
+            fallback: Local fallback prompt string
+            
+        Returns:
+            The prompt template string
+        """
+        # Check cache first
+        if prompt_name in self._cache:
+            return self._cache[prompt_name]
+        
+        prompt_template = fallback
+        
+        if self.use_hub and self.client:
+            try:
+                hub_name = self._get_hub_prompt_name(prompt_name)
+                if VERBOSE:
+                    print(f"   📥 Pulling prompt from Hub: {hub_name}")
+                
+                # Pull from LangSmith Hub using client.pull_prompt()
+                prompt = self.client.pull_prompt(hub_name)
+                
+                # Extract the template string from the prompt object
+                if hasattr(prompt, 'template'):
+                    prompt_template = prompt.template
+                elif hasattr(prompt, 'messages') and len(prompt.messages) > 0:
+                    # For ChatPromptTemplate, get the human message template
+                    for msg in prompt.messages:
+                        if hasattr(msg, 'prompt') and hasattr(msg.prompt, 'template'):
+                            prompt_template = msg.prompt.template
+                            break
+                elif hasattr(prompt, 'first') and hasattr(prompt.first, 'prompt'):
+                    # Handle RunnableSequence
+                    prompt_template = prompt.first.prompt.template if hasattr(prompt.first.prompt, 'template') else str(prompt)
+                else:
+                    prompt_template = str(prompt)
+                
+                if VERBOSE:
+                    print(f"   ✅ Loaded prompt from Hub: {prompt_name}")
+                    
+            except Exception as e:
+                if VERBOSE:
+                    print(f"   ⚠️ Failed to load prompt '{prompt_name}' from Hub: {e}")
+                    print(f"   📝 Using local fallback")
+                prompt_template = fallback
+        
+        # Cache the result
+        self._cache[prompt_name] = prompt_template
+        return prompt_template
+    
+    def push_prompt(self, prompt_name: str, prompt_template: str, description: str = "") -> bool:
+        """
+        Push a prompt to LangSmith Hub.
+        
+        Args:
+            prompt_name: Name for the prompt in the hub
+            prompt_template: The prompt template string
+            description: Optional description
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.use_hub or not self.client:
+            if VERBOSE:
+                print(f"   ⚠️ Cannot push prompt: Hub disabled or client not initialized")
+            return False
+        
+        try:
+            from langchain_core.prompts import PromptTemplate
+            
+            hub_name = self._get_hub_prompt_name(prompt_name)
+            
+            # Create a PromptTemplate object
+            prompt = PromptTemplate.from_template(prompt_template)
+            
+            # Push to hub using client.push_prompt()
+            self.client.push_prompt(hub_name, object=prompt, description=description)
+            
+            if VERBOSE:
+                print(f"   ✅ Pushed prompt to Hub: {hub_name}")
+            return True
+            
+        except Exception as e:
+            if VERBOSE:
+                print(f"   ❌ Failed to push prompt '{prompt_name}': {e}")
+            return False
+    
+    # Convenience properties for each prompt
+    @property
+    def AGENT_SYSTEM_PROMPT(self) -> str:
+        return self.get_prompt("star-agent-system", local_prompts.AGENT_SYSTEM_PROMPT)
+    
+    @property
+    def SITUATION_PROMPT(self) -> str:
+        return self.get_prompt("star-situation", local_prompts.SITUATION_PROMPT)
+    
+    @property
+    def TASK_PROMPT(self) -> str:
+        return self.get_prompt("star-task", local_prompts.TASK_PROMPT)
+    
+    @property
+    def ACTION_PROMPT(self) -> str:
+        return self.get_prompt("star-action", local_prompts.ACTION_PROMPT)
+    
+    @property
+    def RESULT_PROMPT(self) -> str:
+        return self.get_prompt("star-result", local_prompts.RESULT_PROMPT)
+    
+    @property
+    def GENERATE_STAR_PROMPT(self) -> str:
+        return self.get_prompt("star-generate", local_prompts.GENERATE_STAR_PROMPT)
+    
+    @property
+    def EVALUATE_PROMPT(self) -> str:
+        return self.get_prompt("star-evaluate", local_prompts.EVALUATE_PROMPT)
+    
+    @property
+    def WELCOME_MESSAGE(self) -> str:
+        return self.get_prompt("star-welcome", local_prompts.WELCOME_MESSAGE)
+
+
+# Initialize prompt manager
+prompts = PromptManager(handle=LANGSMITH_HANDLE, use_hub=USE_HUB_PROMPTS, client=ls_client)
+
+
+# --- Helper function to push all prompts to Hub ---
+def push_all_prompts_to_hub():
+    """
+    One-time function to push all local prompts to LangSmith Hub.
+    Run this once to set up your prompts in the Hub.
+    
+    Usage:
+        python -c "from app import push_all_prompts_to_hub; push_all_prompts_to_hub()"
+    """
+    if not LANGSMITH_HANDLE:
+        print("❌ LANGSMITH_HANDLE not set. Please set it in .env")
+        return
+    
+    if not ls_client:
+        print("❌ LangSmith client not initialized. Check your LANGSMITH_API_KEY")
+        return
+    
+    print("📤 Pushing all prompts to LangSmith Hub...")
+    
+    prompt_configs = [
+        ("star-agent-system", local_prompts.AGENT_SYSTEM_PROMPT, "System prompt for STAR career coach agent"),
+        ("star-situation", local_prompts.SITUATION_PROMPT, "Prompt to ask about the Situation component"),
+        ("star-task", local_prompts.TASK_PROMPT, "Prompt to ask about the Task component"),
+        ("star-action", local_prompts.ACTION_PROMPT, "Prompt to ask about the Action component"),
+        ("star-result", local_prompts.RESULT_PROMPT, "Prompt to ask about the Result component"),
+        ("star-generate", local_prompts.GENERATE_STAR_PROMPT, "Prompt to generate STAR text from components"),
+        ("star-evaluate", local_prompts.EVALUATE_PROMPT, "Prompt to evaluate STAR text quality"),
+        ("star-welcome", local_prompts.WELCOME_MESSAGE, "Welcome message for the STAR generator"),
+    ]
+    
+    pm = PromptManager(handle=LANGSMITH_HANDLE, use_hub=True, client=ls_client)
+    
+    for name, template, description in prompt_configs:
+        success = pm.push_prompt(name, template, description)
+        status = "✅" if success else "❌"
+        print(f"   {status} {name}")
+    
+    print("\n✅ Done! You can now edit prompts in LangSmith Hub:")
+    print(f"   https://smith.langchain.com/hub/{LANGSMITH_HANDLE}")
 
 
 class STARState(TypedDict):
@@ -79,8 +283,8 @@ class STARState(TypedDict):
     section_to_improve: Optional[Literal["situation", "task", "action", "result"]]
     iteration_count: int
     is_satisfactory: bool
-    user_edited: bool  # Flag to indicate user made edits - skip regeneration
-    skip_generate: bool  # Flag to skip generate node and go straight to evaluate
+    user_edited: bool
+    skip_generate: bool
 
 
 def on_star_text_saved(func):
@@ -92,12 +296,11 @@ def on_star_text_saved(func):
     return wrapper
 
 
-def call_llm(prompt: str, system: str = prompts.AGENT_SYSTEM_PROMPT, run_name: str = None) -> str:
-    """Make an LLM call with the given prompt.
+def call_llm(prompt: str, system: str = None, run_name: str = None) -> str:
+    """Make an LLM call with the given prompt."""
+    if system is None:
+        system = prompts.AGENT_SYSTEM_PROMPT
     
-    LangSmith automatically traces this call when LANGSMITH_TRACING=true.
-    The run_name parameter allows you to give a descriptive name to the trace.
-    """
     messages = [
         SystemMessage(content=system),
         HumanMessage(content=prompt)
@@ -111,8 +314,6 @@ def call_llm(prompt: str, system: str = prompts.AGENT_SYSTEM_PROMPT, run_name: s
         print(f"📝 Prompt: {prompt[:200]}..." if len(prompt) > 200 else f"📝 Prompt: {prompt}")
         print("-"*50)
     
-    # LangSmith will automatically trace this invoke call
-    # You can add metadata for better organization in the LangSmith UI
     response = llm.invoke(
         messages,
         config={
@@ -132,12 +333,7 @@ def call_llm(prompt: str, system: str = prompts.AGENT_SYSTEM_PROMPT, run_name: s
 
 
 def format_star_text_from_state(state: STARState) -> str:
-    """
-    Format the STAR text from state components using the standard format.
-    This ensures consistent formatting matching star_json_to_txt().
-    
-    Empty sections are shown as empty (not invented).
-    """
+    """Format the STAR text from state components."""
     situation = state.get('situation', '').strip()
     task = state.get('task', '').strip()
     action = state.get('action', '').strip()
@@ -154,10 +350,7 @@ def format_star_text_from_state(state: STARState) -> str:
 
 
 def build_star_json_from_state(state: STARState) -> dict:
-    """
-    Build a JSON dict from state components.
-    Empty sections are included as empty strings.
-    """
+    """Build a JSON dict from state components."""
     return {
         "situation": state.get('situation', '').strip(),
         "task": state.get('task', '').strip(),
@@ -169,16 +362,7 @@ def build_star_json_from_state(state: STARState) -> dict:
 # Node functions for the LangGraph workflow
 
 def gather_info_node(state: STARState) -> STARState:
-    """Node that gathers information about a specific STAR component.
-    
-    This node generates STAR text after asking for info, so the
-    EditableText panel is updated at every step.
-    
-    IMPORTANT: 
-    - If user_edited is True, we do NOT regenerate - we keep the user's saved text
-    - Text format follows star_json_to_txt() format
-    - Empty sections remain empty (LLM does not invent content)
-    """
+    """Node that gathers information about a specific STAR component."""
     
     if VERBOSE:
         print("\n🔄 GATHER_INFO_NODE")
@@ -189,11 +373,9 @@ def gather_info_node(state: STARState) -> STARState:
         print(f"   section_to_improve: {state.get('section_to_improve')}")
         print(f"   user_edited: {state.get('user_edited', False)}")
     
-    # Get current star text - DO NOT regenerate if user edited
     current_star_text = state.get("current_star_text", "")
     user_edited = state.get("user_edited", False)
     
-    # Only generate if user hasn't edited and we have components
     if not user_edited:
         has_any_component = any([
             state.get("situation"),
@@ -203,7 +385,6 @@ def gather_info_node(state: STARState) -> STARState:
         ])
         
         if has_any_component:
-            # Generate STAR text using LLM but format output consistently
             current_star_text = generate_star_text(state)
             if VERBOSE:
                 print(f"   📝 Generated STAR text ({len(current_star_text)} chars)")
@@ -211,7 +392,6 @@ def gather_info_node(state: STARState) -> STARState:
         if VERBOSE:
             print(f"   📝 Keeping user's saved text unchanged ({len(current_star_text)} chars)")
     
-    # If evaluate told us which section to improve, ask about that specific section
     section_to_improve = state.get("section_to_improve")
     components, components_text = build_star_from_components(state)
     
@@ -243,7 +423,7 @@ def gather_info_node(state: STARState) -> STARState:
             print(f"   📌 Asking to improve RESULT")
         return {**state, "pending_question": question, "section_to_improve": "result", "current_star_text": current_star_text, "user_edited": False}
     
-    # Normal flow: determine which component needs info (first time through)
+    # Normal flow: determine which component needs info
     if not state.get("situation"):
         prompt = prompts.SITUATION_PROMPT.format(input=state['job_description'])        
         question = call_llm(prompt, run_name="ask_situation")
@@ -272,54 +452,36 @@ def gather_info_node(state: STARState) -> STARState:
             print(f"   📌 Asking for RESULT (first time)")
         return {**state, "pending_question": question, "section_to_improve": "result", "current_star_text": current_star_text, "user_edited": False}
     
-    # All components gathered, clear section_to_improve and move to generate
     if VERBOSE:
         print(f"   ✅ All components gathered")
     return {**state, "pending_question": None, "section_to_improve": None, "current_star_text": current_star_text, "user_edited": False}
 
 
 def generate_star_text(state: STARState) -> str:
-    """
-    Generate STAR text from available components using LLM.
+    """Generate STAR text from available components using LLM."""
+    import re
     
-    IMPORTANT: 
-    - The LLM should ONLY reformulate what's provided, NOT invent content
-    - The output is then formatted to match star_json_to_txt() format
-    - Empty sections remain empty
-    """
     components, components_text = build_star_from_components(state)
     
     if not components:
-        # No components yet - return empty template
         return format_star_text_from_state(state)
     
     if VERBOSE:
         print("   📝 GENERATING STAR TEXT FROM:")
         print(f"      Components: {len(components)}")
     
-    # Call LLM to reformulate (not invent) the content
     prompt = prompts.GENERATE_STAR_PROMPT.format(input=components_text)
     llm_response = call_llm(prompt, run_name="generate_star_text")
     
-    # Try to parse LLM response and reformat to standard format
-    # The LLM might return in various formats, so we try to extract and reformat
     formatted_text = reformat_llm_response_to_standard(llm_response, state)
     
     return formatted_text
 
 
 def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> str:
-    """
-    Take LLM response and reformat it to the standard star_json_to_txt() format.
-    
-    This ensures:
-    - Consistent format: "Situation:\n...\n\nTâche:\n...\n\nAction:\n...\n\nRésultat:\n..."
-    - Empty sections remain empty (not filled with invented content)
-    - No markdown formatting like **SITUATION**
-    """
+    """Take LLM response and reformat it to the standard star_json_to_txt() format."""
     import re
     
-    # Try to parse the LLM response to extract sections
     extracted = {
         "situation": "",
         "task": "",
@@ -327,17 +489,13 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
         "result": ""
     }
     
-    # Try using star_txt_to_json first
     parsed = star_txt_to_json(llm_response)
     if parsed:
-        # Map the parsed keys to our standard keys
         extracted["situation"] = parsed.get("Situation", parsed.get("situation", "")).strip()
         extracted["task"] = parsed.get("Tasks", parsed.get("Tâche", parsed.get("task", ""))).strip()
         extracted["action"] = parsed.get("Action", parsed.get("action", "")).strip()
         extracted["result"] = parsed.get("Results", parsed.get("Résultat", parsed.get("result", ""))).strip()
     else:
-        # Fallback: try to extract sections manually
-        # Find positions of each section (handle various formats)
         patterns = {
             "situation": [r"situation\s*:", r"\*\*situation\*\*\s*:?", r"situation\s*\n"],
             "task": [r"tâche\s*:", r"task\s*:", r"\*\*tâche\*\*\s*:?", r"\*\*task\*\*\s*:?"],
@@ -354,14 +512,11 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
                     positions.append((key, match.end()))
                     break
         
-        # Sort by position
         positions.sort(key=lambda x: x[1])
         
-        # Extract content between positions
         for i, (key, pos) in enumerate(positions):
             if i + 1 < len(positions):
                 next_pos = positions[i + 1][1]
-                # Find the start of the next section header
                 for next_key, next_pattern_list in patterns.items():
                     if next_key == positions[i + 1][0]:
                         for pattern in next_pattern_list:
@@ -374,13 +529,10 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
             else:
                 content = llm_response[pos:].strip()
             
-            # Clean up the content (remove markdown, extra newlines, etc.)
-            content = re.sub(r'\*\*', '', content)  # Remove **
+            content = re.sub(r'\*\*', '', content)
             content = content.strip()
             extracted[key] = content
     
-    # IMPORTANT: Only include content that was actually in the original state
-    # This prevents LLM from inventing content for empty sections
     final = {
         "situation": extracted["situation"] if state.get("situation") else "",
         "task": extracted["task"] if state.get("task") else "",
@@ -388,7 +540,6 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
         "result": extracted["result"] if state.get("result") else ""
     }
     
-    # If extraction failed but we have state content, use state directly
     if not any(final.values()) and any([state.get("situation"), state.get("task"), state.get("action"), state.get("result")]):
         final = {
             "situation": state.get("situation", "").strip(),
@@ -397,7 +548,6 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
             "result": state.get("result", "").strip()
         }
     
-    # Format to standard output
     text = (
         f"Situation:\n{final['situation']}\n\n"
         f"Tâche:\n{final['task']}\n\n"
@@ -409,20 +559,15 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
 
 
 def generate_node(state: STARState) -> STARState:
-    """Node that generates the final STAR text when all components are gathered.
+    """Node that generates the final STAR text when all components are gathered."""
     
-    IMPORTANT: If skip_generate is True (after user edit), we skip regeneration
-    and keep the user's saved text.
-    """
-    
-    # Check if we should skip generation (user edited the text)
     if state.get("skip_generate", False):
         if VERBOSE:
             print("\n🔄 GENERATE_NODE - SKIPPED (user edited text)")
         return {
             **state, 
             "current_step": "evaluate",
-            "skip_generate": False  # Reset flag
+            "skip_generate": False
         }
     
     if VERBOSE:
@@ -436,7 +581,6 @@ def generate_node(state: STARState) -> STARState:
         print(f"   result: '{state.get('result', '')[:50]}...'")
         print("-"*50)
     
-    # Generate STAR text
     star_text = generate_star_text(state)
     
     if VERBOSE:
@@ -455,17 +599,13 @@ def generate_node(state: STARState) -> STARState:
 
 
 def evaluate_node(state: STARState) -> STARState:
-    """Node that autonomously evaluates the STAR text and decides which section needs improvement.
-    
-    This node does NOT modify the STAR text - it only evaluates and decides next steps.
-    """
+    """Node that autonomously evaluates the STAR text."""
     
     if VERBOSE:
         print("\n🔄 EVALUATE_NODE")
         print(f"   iteration_count: {state.get('iteration_count', 0)}")
         print(f"   user_edited: {state.get('user_edited', False)}")
     
-    # Check if all components are gathered
     all_components = all([
         state.get("situation"), 
         state.get("task"), 
@@ -477,12 +617,10 @@ def evaluate_node(state: STARState) -> STARState:
         print(f"   all_components: {all_components}")
     
     if not all_components:
-        # Still gathering info, continue to next component
         if VERBOSE:
             print("   ⏭️ Not all components gathered, continuing to gather_info")
         return {**state, "current_step": "gather_info", "is_satisfactory": False, "section_to_improve": None}
     
-    # All components gathered - evaluate the text (without modifying it)
     prompt = prompts.EVALUATE_PROMPT.format(input=state['current_star_text'])
     
     if VERBOSE:
@@ -490,9 +628,7 @@ def evaluate_node(state: STARState) -> STARState:
     
     response = call_llm(prompt, run_name="evaluate_star_text")
     
-    # Parse the response
     try:
-        # Clean response if needed
         cleaned = response.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("```")[1]
@@ -536,7 +672,6 @@ def evaluate_node(state: STARState) -> STARState:
         if VERBOSE:
             print(f"⚠️ Failed to parse evaluation response: {e}")
             print(f"   Raw response: {response}")
-        # Default to satisfactory if parsing fails
         return {
             **state, 
             "is_satisfactory": True, 
@@ -558,7 +693,7 @@ def complete_node(state: STARState) -> STARState:
 # Router functions
 
 def after_gather_router(state: STARState) -> str:
-    """Router after gather_info - check if all components gathered"""
+    """Router after gather_info"""
     all_components = all([
         state.get("situation"),
         state.get("task"),
@@ -573,12 +708,10 @@ def after_gather_router(state: STARState) -> str:
         print(f"   skip_generate: {state.get('skip_generate', False)}")
     
     if state.get("pending_question"):
-        # We have a question to ask, stop and wait for user
         if VERBOSE:
             print(f"   → END (waiting for user response)")
         return END
     elif all_components:
-        # All components gathered
         if VERBOSE:
             print(f"   → generate")
         return "generate"
@@ -589,7 +722,7 @@ def after_gather_router(state: STARState) -> str:
 
 
 def after_evaluate_router(state: STARState) -> str:
-    """Router after evaluate to decide next step"""
+    """Router after evaluate"""
     
     if VERBOSE:
         print(f"\n🔀 AFTER_EVALUATE_ROUTER")
@@ -602,12 +735,10 @@ def after_evaluate_router(state: STARState) -> str:
             print(f"   → complete")
         return "complete"
     elif state.get("pending_question"):
-        # Evaluate provided a question, stop and wait for user
         if VERBOSE:
             print(f"   → END (waiting for user to answer improvement question)")
         return END
     else:
-        # Continue gathering info
         if VERBOSE:
             print(f"   → gather_info")
         return "gather_info"
@@ -617,19 +748,15 @@ def after_evaluate_router(state: STARState) -> str:
 def create_star_graph():
     """Create and compile the LangGraph workflow"""
     
-    # Create the graph
     workflow = StateGraph(STARState)
     
-    # Add nodes
     workflow.add_node("gather_info", gather_info_node)
     workflow.add_node("generate", generate_node)
     workflow.add_node("evaluate", evaluate_node)
     workflow.add_node("complete", complete_node)
     
-    # Set entry point
     workflow.set_entry_point("gather_info")
     
-    # After gathering info: either wait for user or go to generate if all done
     workflow.add_conditional_edges(
         "gather_info",
         after_gather_router,
@@ -639,10 +766,8 @@ def create_star_graph():
         }
     )
     
-    # After generating: always evaluate
     workflow.add_edge("generate", "evaluate")
     
-    # After evaluating: complete, wait for user, or continue gathering
     workflow.add_conditional_edges(
         "evaluate",
         after_evaluate_router,
@@ -655,7 +780,6 @@ def create_star_graph():
     
     workflow.add_edge("complete", END)
     
-    # Compile WITHOUT checkpointer - we manage state via Chainlit session
     return workflow.compile()
 
 
@@ -666,10 +790,7 @@ graph = create_star_graph()
 # --- EditableText Helper Functions ---
 
 def parse_star_text_to_components(star_text: str) -> dict:
-    """
-    Parse STAR text back into individual components using star_txt_to_json.
-    Returns dict with keys: situation, task, action, result
-    """
+    """Parse STAR text back into individual components."""
     components = {
         "situation": "",
         "task": "",
@@ -677,11 +798,9 @@ def parse_star_text_to_components(star_text: str) -> dict:
         "result": ""
     }
     
-    # Use the utility function
     parsed = star_txt_to_json(star_text)
     
     if parsed:
-        # Map the parsed keys to our standard lowercase keys
         components["situation"] = parsed.get("Situation", "").strip()
         components["task"] = parsed.get("Tasks", "").strip()
         components["action"] = parsed.get("Action", "").strip()
@@ -702,13 +821,11 @@ async def update_editable_text(star_text: str):
     elem = cl.user_session.get("current_element")
     
     if elem:
-        # Update existing element
         elem.props["initial"] = star_text
         await elem.update()
         if VERBOSE:
             print("📝 Updated EditableText element")
     else:
-        # Create new element
         elem = cl.CustomElement(
             name="EditableText",
             display="inline",
@@ -725,28 +842,18 @@ async def update_editable_text(star_text: str):
 
 @on_star_text_saved
 async def handle_save_action(saved_text: str):
-    """Handle when user saves edited text from the side panel.
-    
-    IMPORTANT: After user saves:
-    1. We parse the text using star_txt_to_json and update state components
-    2. We keep the user's text EXACTLY as saved (no regeneration)
-    3. We evaluate to see which section needs improvement
-    4. We ask questions to get more info, but NEVER modify the user's saved text
-    """
+    """Handle when user saves edited text from the side panel."""
     if VERBOSE:
         print("\n" + "="*50)
         print("💾 STAR TEXT SAVED BY USER")
         print("="*50)
         print(f"   Saved text length: {len(saved_text)}")
     
-    # Store the saved text
     cl.user_session.set("saved_star_text", saved_text)
     
-    # Parse the saved text using star_txt_to_json
     parsed = star_txt_to_json(saved_text)
     cl.user_session.set("saved_star_json", parsed)
     
-    # Parse into components and update the state
     components = parse_star_text_to_components(saved_text)
     
     if VERBOSE:
@@ -756,48 +863,31 @@ async def handle_save_action(saved_text: str):
         print(f"      action: {bool(components.get('action'))} - '{components.get('action', '')[:30]}...'")
         print(f"      result: {bool(components.get('result'))} - '{components.get('result', '')[:30]}...'")
     
-    # Get current state and update with user edits
     state = cl.user_session.get("state")
     if state:
-        # Update components - use parsed values (empty string if not present)
         state["situation"] = components.get("situation", "")
         state["task"] = components.get("task", "")
         state["action"] = components.get("action", "")
         state["result"] = components.get("result", "")
         
-        # IMPORTANT: Keep the user's text EXACTLY as saved
         state["current_star_text"] = saved_text
-        
-        # Set flags to indicate user edited - skip regeneration
         state["user_edited"] = True
-        state["skip_generate"] = True  # Skip generate node, go straight to evaluate
-        
-        # Clear pending question and section_to_improve for fresh evaluation
+        state["skip_generate"] = True
         state["pending_question"] = None
         state["section_to_improve"] = None
-        
-        # Set step to gather_info which will route to generate (which will skip to evaluate)
         state["current_step"] = "gather_info"
         
         if VERBOSE:
             print("   ✅ State updated with user edits")
             print("   🔒 User's text will be preserved (skip_generate=True)")
         
-        # Save updated state
         cl.user_session.set("state", state)
     
-    # DO NOT update EditableText here - keep user's exact text
-    # The element already has the user's saved text
-    
-    # Notify user briefly
     await cl.Message(content="✅ Modifications sauvegardées! Évaluation en cours...").send()
     
-    # Re-invoke the workflow to evaluate the saved text (without regenerating)
     if VERBOSE:
         print("\n⚙️ Re-invoking graph after user edit (will skip generation)...")
     
-    # Run the graph with updated state
-    # Add LangSmith metadata for the graph invocation
     result = await asyncio.to_thread(
         graph.invoke, 
         state,
@@ -817,13 +907,10 @@ async def handle_save_action(saved_text: str):
         print(f"   is_satisfactory: {result.get('is_satisfactory')}")
         print(f"   current_star_text preserved: {result.get('current_star_text') == saved_text}")
     
-    # Update session state
     cl.user_session.set("state", result)
     
-    # Get the element but DON'T change the text - it should stay as user saved it
     elem = cl.user_session.get("current_element")
     
-    # Send response based on result
     if result.get("current_step") == "complete":
         final_message = f"""🎉 **Votre mission STAR est terminée !**
 
@@ -837,7 +924,6 @@ Votre texte a été validé.
             await cl.Message(content=final_message).send()
     
     elif result.get("pending_question"):
-        # Build the message with the question
         section_name = result.get("section_to_improve", "").upper() if result.get("section_to_improve") else ""
         
         if section_name:
@@ -857,7 +943,6 @@ Votre texte a été validé.
             await cl.Message(content=question_msg).send()
     
     else:
-        # No pending question but not complete - might need more info
         await cl.Message(content="📝 Modifications prises en compte. Continuez à répondre aux questions pour améliorer votre texte STAR.").send()
 
 
@@ -865,10 +950,8 @@ Votre texte a été validé.
 async def start():
     """Initialize the chat session"""
     
-    # Generate a unique session ID for LangSmith tracing
     session_id = f"session-{uuid.uuid4()}"
     
-    # Initialize LangGraph state
     initial_state: STARState = {
         "job_description": "",
         "situation": "",
@@ -885,14 +968,9 @@ async def start():
         "skip_generate": False
     }
 
-    # Store user and session IDs for LangSmith tracing
     cl.user_session.set("user_id", user_id)
     cl.user_session.set("session_id", session_id)
-    
-    # Store state in session
     cl.user_session.set("state", initial_state)
-    
-    # Initialize EditableText session variables
     cl.user_session.set("saved_star_text", None)
     cl.user_session.set("saved_star_json", None)
     cl.user_session.set("current_element", None)
@@ -902,28 +980,20 @@ async def start():
         print(f"   user_id: {user_id}")
         print(f"   session_id: {session_id}")
     
-    # Welcome message
     welcome = prompts.WELCOME_MESSAGE
     await cl.Message(content=welcome).send()
 
 
 @cl.on_message
 async def main(message: cl.Message):
-    """Handle incoming messages.
+    """Handle incoming messages."""
     
-    Routes SAVE_STAR_TEXT: messages to the save handler,
-    all other messages go through the LangGraph workflow.
-    """
-    
-    # Route save events to handler (from EditableText component)
-    # The EditableText component automatically submits this and clears the input
     if message.content.startswith("SAVE_STAR_TEXT:"):
         saved_text = message.content.replace("SAVE_STAR_TEXT:", "", 1)
         if 'star_text_saved' in _event_handlers:
             await _event_handlers['star_text_saved'](saved_text)
         return
     
-    # Handle regular messages through the workflow
     await handle_workflow_message(message)
 
 
@@ -932,7 +1002,6 @@ async def handle_workflow_message(message: cl.Message):
     
     state = cl.user_session.get("state")
     
-    # Handle the conversation based on current step
     current_step = state.get("current_step", "gather_info")
     section_to_improve = state.get("section_to_improve")
     
@@ -944,18 +1013,15 @@ async def handle_workflow_message(message: cl.Message):
         print(f"   section_to_improve: {section_to_improve}")
         print(f"   user_input: {message.content[:100]}...")
     
-    # Check if we have previously saved text to use as context
     saved_star = cl.user_session.get("saved_star_text")
     if VERBOSE and saved_star:
         print(f"   📌 Previously saved text available in context")
     
-    # Initial job description
     if not state.get("job_description"):
         state["job_description"] = message.content
         if VERBOSE:
             print("   → Stored as job_description")
         
-    # If we're improving a specific section, update that section
     elif section_to_improve:
         if section_to_improve == "situation":
             state["situation"] = state.get("situation", "") + " " + message.content
@@ -973,14 +1039,11 @@ async def handle_workflow_message(message: cl.Message):
             state["result"] = state.get("result", "") + " " + message.content
             if VERBOSE:
                 print(f"   → Appended to RESULT")
-        # Clear section_to_improve after receiving the answer
         state["section_to_improve"] = None
         state["pending_question"] = None
-        # Reset user_edited flag since we're adding new info
         state["user_edited"] = False
         state["skip_generate"] = False
         
-    # Normal gathering flow (first time through each section)
     elif current_step == "gather_info":
         if not state.get("situation"):
             state["situation"] = message.content
@@ -1002,8 +1065,6 @@ async def handle_workflow_message(message: cl.Message):
     if VERBOSE:
         print("\n⚙️ Invoking graph...")
     
-    # Run synchronous graph.invoke in a thread pool to avoid blocking
-    # Add LangSmith metadata for tracing
     result = await asyncio.to_thread(
         graph.invoke, 
         state,
@@ -1024,17 +1085,14 @@ async def handle_workflow_message(message: cl.Message):
         print(f"   is_satisfactory: {result.get('is_satisfactory')}")
         print(f"   current_star_text length: {len(result.get('current_star_text', ''))}")
     
-    # Update session state
     cl.user_session.set("state", result)
     
-    # ALWAYS update EditableText if we have generated text
     elem = None
     if result.get("current_star_text"):
         elem = await update_editable_text(result["current_star_text"])
         if VERBOSE:
             print(f"   📝 EditableText updated with {len(result['current_star_text'])} chars")
     
-    # Send response based on result
     if result.get("current_step") == "complete":
         final_message = f"""🎉 **Votre mission STAR est terminée !**
 
@@ -1054,7 +1112,6 @@ Voici votre mission STAR finale (après {result.get('iteration_count', 1)} itér
             await cl.Message(content=final_message).send()
     
     elif result.get("pending_question"):
-        # Build the message with the question
         section_name = result.get("section_to_improve", "").upper() if result.get("section_to_improve") else ""
         
         if section_name:
@@ -1064,7 +1121,6 @@ Voici votre mission STAR finale (après {result.get('iteration_count', 1)} itér
         else:
             question_msg = result.get('pending_question')
         
-        # Always include the element if we have STAR text
         if elem:
             await cl.Message(content=question_msg, elements=[elem]).send()
         else:
@@ -1090,4 +1146,6 @@ def get_current_state() -> STARState:
 
 if __name__ == "__main__":
     # This file is run by chainlit, not directly
+    # To push prompts to hub, run:
+    # python -c "from app import push_all_prompts_to_hub; push_all_prompts_to_hub()"
     pass

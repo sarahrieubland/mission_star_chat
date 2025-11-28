@@ -5,9 +5,7 @@ Chat to reformulate descriptions into STAR
 
 Create environment with python 3.11 (for langfus compatibility) and activate
 ```
-#pyenv install 3.11.9
-#pyenv local 3.11.9
-python -m venv .venv #(python3.11 -m venv .venv)
+python3 -m venv .venv
 source .venv/bin/activate
 ``` 
 
@@ -27,14 +25,20 @@ in the `.env` file at the root of the project, you need to put the secrets:
 
 ```
 OPENAI_API_KEY=
-LANGFUSE_SECRET_KEY=j
-LANGFUSE_PUBLIC_KEY=
+LANGSMITH_API_KEY=
 ```
 
 ## 3. Run chainlit app
 
 ```
 chainlit run app.py -w
+```
+
+## 4. Langsmith
+
+Store the prompts in Langsmith
+```
+python3 -c "from app_agent_combined import push_all_prompts_to_hub; push_all_prompts_to_hub()"
 ```
 
 ## 4. Langgraph workflow for the agentic chatbot
