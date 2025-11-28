@@ -11,29 +11,56 @@ Features:
 - Automatic save/submit from EditableText component
 - Workflow continues after user saves edits (without regenerating text)
 - Text format follows star_json_to_txt() format consistently
+- LangSmith integration for tracing and monitoring
 """
 
 import asyncio
 import json
 import os
+import uuid
 from typing import TypedDict, Literal, Optional
 from functools import wraps
 
 import chainlit as cl
+from langsmith import Client
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from config import prompts
 from src.utils import star_json_to_txt, star_txt_to_json, build_star_from_components
 
+from dotenv import load_dotenv
+load_dotenv()
 
-# --- LLM setup ---
+# --- Environment & Configuration ---
 MODEL_NAME = os.getenv("POC_MODEL", "gpt-4o-mini")
 TEMPERATURE = float(os.getenv("POC_TEMP", "0.0"))
 VERBOSE = os.getenv("VERBOSE", "true").lower() == "true"
 
+# --- LangSmith Configuration ---
+os.environ.setdefault("LANGSMITH_TRACING", "true")
+
+# Initialize LangSmith client for additional operations (optional)
+try:
+    ls_client = Client()
+    if VERBOSE:
+        print("✅ LangSmith client initialized")
+        print(f"   Project: {os.getenv('LANGSMITH_PROJECT', 'default')}")
+except Exception as e:
+    ls_client = None
+    if VERBOSE:
+        print(f"⚠️ LangSmith client initialization failed: {e}")
+
+# Generate a unique user ID for this session
+user_id = f"user-{uuid.uuid4()}"
+
 # Initialize LangChain OpenAI client
-llm = ChatOpenAI(model=MODEL_NAME, temperature=TEMPERATURE)
+# LangSmith will automatically trace all calls made through this client
+llm = ChatOpenAI(
+    model=MODEL_NAME,
+    temperature=TEMPERATURE,
+)
 
 # Registry for custom event handlers
 _event_handlers = {}
@@ -65,25 +92,40 @@ def on_star_text_saved(func):
     return wrapper
 
 
-def call_llm(prompt: str, system: str = prompts.AGENT_SYSTEM_PROMPT) -> str:
-    """Make an LLM call with the given prompt"""
+def call_llm(prompt: str, system: str = prompts.AGENT_SYSTEM_PROMPT, run_name: str = None) -> str:
+    """Make an LLM call with the given prompt.
+    
+    LangSmith automatically traces this call when LANGSMITH_TRACING=true.
+    The run_name parameter allows you to give a descriptive name to the trace.
+    """
     messages = [
-        ("system", system),
-        ("user", prompt)
+        SystemMessage(content=system),
+        HumanMessage(content=prompt)
     ]
     
     if VERBOSE:
         print("\n" + "="*50)
-        print("📤 LLM CALL")
+        print(f"📤 LLM CALL{f' ({run_name})' if run_name else ''}")
         print("="*50)
         print(f"🔧 System: {system[:100]}..." if len(system) > 100 else f"🔧 System: {system}")
-        print(f"📝 Prompt: {prompt}")
+        print(f"📝 Prompt: {prompt[:200]}..." if len(prompt) > 200 else f"📝 Prompt: {prompt}")
         print("-"*50)
     
-    response = llm.invoke(messages)
+    # LangSmith will automatically trace this invoke call
+    # You can add metadata for better organization in the LangSmith UI
+    response = llm.invoke(
+        messages,
+        config={
+            "run_name": run_name or "llm_call",
+            "metadata": {
+                "user_id": user_id,
+                "model": MODEL_NAME,
+            }
+        }
+    )
     
     if VERBOSE:
-        print(f"📥 Response: {response.content}")
+        print(f"📥 Response: {response.content[:200]}..." if len(response.content) > 200 else f"📥 Response: {response.content}")
         print("="*50 + "\n")
     
     return response.content
@@ -175,28 +217,28 @@ def gather_info_node(state: STARState) -> STARState:
     
     if section_to_improve == "situation":
         prompt = prompts.SITUATION_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_improve_situation")
         if VERBOSE:
             print(f"   📌 Asking to improve SITUATION")
         return {**state, "pending_question": question, "section_to_improve": "situation", "current_star_text": current_star_text, "user_edited": False}
     
     elif section_to_improve == "task":
         prompt = prompts.TASK_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_improve_task")
         if VERBOSE:
             print(f"   📌 Asking to improve TASK")
         return {**state, "pending_question": question, "section_to_improve": "task", "current_star_text": current_star_text, "user_edited": False}
     
     elif section_to_improve == "action":
         prompt = prompts.ACTION_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_improve_action")
         if VERBOSE:
             print(f"   📌 Asking to improve ACTION")
         return {**state, "pending_question": question, "section_to_improve": "action", "current_star_text": current_star_text, "user_edited": False}
     
     elif section_to_improve == "result":
         prompt = prompts.RESULT_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_improve_result")
         if VERBOSE:
             print(f"   📌 Asking to improve RESULT")
         return {**state, "pending_question": question, "section_to_improve": "result", "current_star_text": current_star_text, "user_edited": False}
@@ -204,28 +246,28 @@ def gather_info_node(state: STARState) -> STARState:
     # Normal flow: determine which component needs info (first time through)
     if not state.get("situation"):
         prompt = prompts.SITUATION_PROMPT.format(input=state['job_description'])        
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_situation")
         if VERBOSE:
             print(f"   📌 Asking for SITUATION (first time)")
         return {**state, "pending_question": question, "section_to_improve": "situation", "current_star_text": current_star_text, "user_edited": False}
     
     elif not state.get("task"):
         prompt = prompts.TASK_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_task")
         if VERBOSE:
             print(f"   📌 Asking for TASK (first time)")
         return {**state, "pending_question": question, "section_to_improve": "task", "current_star_text": current_star_text, "user_edited": False}
     
     elif not state.get("action"):
         prompt = prompts.ACTION_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_action")
         if VERBOSE:
             print(f"   📌 Asking for ACTION (first time)")
         return {**state, "pending_question": question, "section_to_improve": "action", "current_star_text": current_star_text, "user_edited": False}
     
     elif not state.get("result"):
         prompt = prompts.RESULT_PROMPT.format(input=components_text)
-        question = call_llm(prompt)
+        question = call_llm(prompt, run_name="ask_result")
         if VERBOSE:
             print(f"   📌 Asking for RESULT (first time)")
         return {**state, "pending_question": question, "section_to_improve": "result", "current_star_text": current_star_text, "user_edited": False}
@@ -257,7 +299,7 @@ def generate_star_text(state: STARState) -> str:
     
     # Call LLM to reformulate (not invent) the content
     prompt = prompts.GENERATE_STAR_PROMPT.format(input=components_text)
-    llm_response = call_llm(prompt)
+    llm_response = call_llm(prompt, run_name="generate_star_text")
     
     # Try to parse LLM response and reformat to standard format
     # The LLM might return in various formats, so we try to extract and reformat
@@ -275,6 +317,8 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
     - Empty sections remain empty (not filled with invented content)
     - No markdown formatting like **SITUATION**
     """
+    import re
+    
     # Try to parse the LLM response to extract sections
     extracted = {
         "situation": "",
@@ -293,8 +337,6 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
         extracted["result"] = parsed.get("Results", parsed.get("Résultat", parsed.get("result", ""))).strip()
     else:
         # Fallback: try to extract sections manually
-        text_lower = llm_response.lower()
-        
         # Find positions of each section (handle various formats)
         patterns = {
             "situation": [r"situation\s*:", r"\*\*situation\*\*\s*:?", r"situation\s*\n"],
@@ -303,7 +345,6 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
             "result": [r"résultat\s*:", r"result\s*:", r"\*\*résultat\*\*\s*:?", r"\*\*result\*\*\s*:?"]
         }
         
-        import re
         positions = []
         
         for key, pattern_list in patterns.items():
@@ -447,7 +488,7 @@ def evaluate_node(state: STARState) -> STARState:
     if VERBOSE:
         print("   📊 Evaluating STAR text...")
     
-    response = call_llm(prompt)
+    response = call_llm(prompt, run_name="evaluate_star_text")
     
     # Parse the response
     try:
@@ -756,7 +797,18 @@ async def handle_save_action(saved_text: str):
         print("\n⚙️ Re-invoking graph after user edit (will skip generation)...")
     
     # Run the graph with updated state
-    result = await asyncio.to_thread(graph.invoke, state)
+    # Add LangSmith metadata for the graph invocation
+    result = await asyncio.to_thread(
+        graph.invoke, 
+        state,
+        config={
+            "run_name": "star_workflow_after_user_edit",
+            "metadata": {
+                "user_id": cl.user_session.get("user_id", user_id),
+                "trigger": "user_save"
+            }
+        }
+    )
     
     if VERBOSE:
         print(f"✅ Graph invocation complete after user edit.")
@@ -813,6 +865,9 @@ Votre texte a été validé.
 async def start():
     """Initialize the chat session"""
     
+    # Generate a unique session ID for LangSmith tracing
+    session_id = f"session-{uuid.uuid4()}"
+    
     # Initialize LangGraph state
     initial_state: STARState = {
         "job_description": "",
@@ -829,6 +884,10 @@ async def start():
         "user_edited": False,
         "skip_generate": False
     }
+
+    # Store user and session IDs for LangSmith tracing
+    cl.user_session.set("user_id", user_id)
+    cl.user_session.set("session_id", session_id)
     
     # Store state in session
     cl.user_session.set("state", initial_state)
@@ -837,6 +896,11 @@ async def start():
     cl.user_session.set("saved_star_text", None)
     cl.user_session.set("saved_star_json", None)
     cl.user_session.set("current_element", None)
+    
+    if VERBOSE:
+        print(f"\n🚀 New session started")
+        print(f"   user_id: {user_id}")
+        print(f"   session_id: {session_id}")
     
     # Welcome message
     welcome = prompts.WELCOME_MESSAGE
@@ -939,7 +1003,19 @@ async def handle_workflow_message(message: cl.Message):
         print("\n⚙️ Invoking graph...")
     
     # Run synchronous graph.invoke in a thread pool to avoid blocking
-    result = await asyncio.to_thread(graph.invoke, state)
+    # Add LangSmith metadata for tracing
+    result = await asyncio.to_thread(
+        graph.invoke, 
+        state,
+        config={
+            "run_name": "star_workflow",
+            "metadata": {
+                "user_id": cl.user_session.get("user_id", user_id),
+                "session_id": cl.user_session.get("session_id", "unknown"),
+                "current_step": current_step,
+            }
+        }
+    )
     
     if VERBOSE:
         print(f"✅ Graph invocation complete.")

@@ -7,7 +7,7 @@ export default function EditableText() {
   const [text, setText] = useState(initialText);
   const [saved, setSaved] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
-  const observerRef = useRef<MutationObserver | null>(null);
+  const observerRef = useRef(null);
 
   // Update from props when new text is generated (but preserve user edits if they're actively editing)
   useEffect(() => {
@@ -17,7 +17,7 @@ export default function EditableText() {
         setText(props.initial);
       }
     }
-  }, [props.initial]);
+  }, [props.initial, text, hasEdited]);
 
   // Reset hasEdited flag when props change significantly (new generation)
   useEffect(() => {
@@ -27,7 +27,7 @@ export default function EditableText() {
     }
   }, [props.initial]);
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e) => {
     setText(e.target.value);
     setHasEdited(true);
   };
@@ -52,12 +52,13 @@ export default function EditableText() {
     // This is more targeted to avoid hiding legitimate messages
     observerRef.current = new MutationObserver(() => {
       // Find all message elements
-      document.querySelectorAll('[class*="message"], .step, [class*="MessageContent"]').forEach(el => {
+      const elements = document.querySelectorAll('[class*="message"], .step, [class*="MessageContent"]');
+      elements.forEach((el) => {
         const textContent = el.textContent || '';
         // Only hide if it starts with SAVE_STAR_TEXT: (the actual save command)
         // Be very specific to avoid hiding other messages
         if (textContent.trim().startsWith('SAVE_STAR_TEXT:')) {
-          (el as HTMLElement).style.display = 'none';
+          el.style.display = 'none';
         }
       });
     });
@@ -66,8 +67,8 @@ export default function EditableText() {
     
     return () => {
       const styleEl = document.getElementById('editable-text-styles');
-      if (styleEl) {
-        document.head.removeChild(styleEl);
+      if (styleEl && styleEl.parentNode) {
+        styleEl.parentNode.removeChild(styleEl);
       }
       if (observerRef.current) {
         observerRef.current.disconnect();
@@ -81,9 +82,10 @@ export default function EditableText() {
     setTimeout(() => setSaved(false), 2000);
     
     // Find the chat input
-    const chatInput = document.querySelector('textarea[placeholder*="message"]') || 
-                      document.querySelector('textarea[placeholder*="Message"]') ||
-                      document.querySelector('form textarea') as HTMLTextAreaElement | null;
+    const chatInput = 
+      document.querySelector('textarea[placeholder*="message"]') || 
+      document.querySelector('textarea[placeholder*="Message"]') ||
+      document.querySelector('form textarea');
     
     console.log('[SAVE] Chat input found:', !!chatInput);
     
@@ -93,7 +95,7 @@ export default function EditableText() {
     }
     
     // Try multiple ways to find the submit button
-    let submitButton: HTMLButtonElement | null = null;
+    let submitButton = null;
     
     // Method 1: Look for form
     const form = chatInput.closest('form');
@@ -112,12 +114,12 @@ export default function EditableText() {
     // Method 3: Look for any button with send icon near textarea
     if (!submitButton) {
       const allButtons = document.querySelectorAll('button');
-      submitButton = Array.from(allButtons).find(btn => {
+      submitButton = Array.from(allButtons).find((btn) => {
         const svg = btn.querySelector('svg');
         const isNearInput = chatInput.parentElement?.contains(btn) || 
                            chatInput.parentElement?.parentElement?.contains(btn);
         return svg && isNearInput;
-      }) as HTMLButtonElement || null;
+      }) || null;
       console.log('[SAVE] Found button via SVG search:', !!submitButton);
     }
     
@@ -154,13 +156,16 @@ export default function EditableText() {
       chatInput.dispatchEvent(inputEvent);
       console.log('[SAVE] Dispatched input event');
       
+      // Capture submitButton in closure
+      const buttonToClick = submitButton;
+      
       // Wait a tiny bit for the button to become enabled
       setTimeout(() => {
         console.log('[SAVE] Attempting to click submit button');
-        console.log('[SAVE] Button disabled status:', submitButton?.disabled);
+        console.log('[SAVE] Button disabled status:', buttonToClick?.disabled);
         
-        if (submitButton && !submitButton.disabled) {
-          submitButton.click();
+        if (buttonToClick && !buttonToClick.disabled) {
+          buttonToClick.click();
           console.log('[SAVE] Submit button clicked!');
         } else {
           console.error('[SAVE] Submit button is disabled, cannot click');
