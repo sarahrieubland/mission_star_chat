@@ -96,6 +96,8 @@ basée sur ces éléments : {input}
 Rédigez un texte cohérent (maximum 300 mots) qui s'enchaîne naturellement et serait 
 convaincant pour un futur employeur. Soyez précis et percutant."""
 
+# Add this to your config/prompts.py file:
+
 EVALUATE_PROMPT = """Évaluez cette descrition de mission au format STAR et décidez si elle est satisfaisante :
 
 {input}
@@ -107,11 +109,20 @@ Critères d'évaluation :
 4. La description serait-elle convaincante dans un CV pour postuler pour un rôle similaire ?
 
 Répondez UNIQUEMENT avec un JSON valide (sans texte avant ou après) :
-{{"is_satisfactory": true/false, "question": "votre question si amélioration nécessaire, sinon null"}}
+{{
+    "is_satisfactory": true ou false,
+    "section_to_improve": "situation" ou "task" ou "action" ou "result" ou null,
+    "question": "votre question spécifique pour améliorer la section, ou null si satisfaisant"
+}}
 
-Si satisfaisant, mettez "question": null.
-Si amélioration nécessaire, posez UNE question précise à l'utilisateur pour obtenir plus de détails."""
+Règles :
+- Si satisfaisant : "is_satisfactory": true, "section_to_improve": null, "question": null
+- Si amélioration nécessaire : 
+  - "is_satisfactory": false
+  - "section_to_improve": la section qui a le plus besoin d'amélioration ("situation", "task", "action", ou "result")
+  - "question": une question précise pour obtenir plus de détails sur cette section spécifique
 
+Choisissez UNE SEULE section à améliorer à la fois."""
 
 
 # # Prompt pour générer une seule question de clarification ciblée pour un champ manquant
