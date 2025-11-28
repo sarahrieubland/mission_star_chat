@@ -3,32 +3,33 @@ Modèles de prompts pour l'agent chatbot STAR.
 
 """
 
+WELCOME_MESSAGE = """👋 **Bienvenu!**
+
+Je vais vous aider à créer une description de votre mission au format STAR (Situation, Tâche, Action, Résultat) percutante pour alimenter votre CV.
+
+**Pour commencer, décrivez une expérience professionnelle, mission, ou une réalisation 
+que vous souhaitez transformer au format STAR.**
+
+Par exemple : "J'ai dirigé un projet pour améliorer la satisfaction client dans mon entreprise" 
+ou "J'ai résolu un problème technique majeur lors d'un lancement de produit"."""
+
+
 # --- Agent System Prompt ---
 AGENT_SYSTEM_PROMPT = """Vous êtes un assistant expert pour un entreprise de consultants, qui aide les collaborateurs 
 de l'entreprise à créer des entrées au format STAR (Situation, Tâche, Action, Résultat) sur leur missons chez des clients 
 et sur leurs expériences professionnelles passées.
 
-Votre objectif est de guider les utilisateurs dans la création d'entrées STAR complètes et détaillées en :
-1. Extrayant la structure STAR initiale à partir de leurs descriptions
-2. Identifiant les champs manquants ou faibles
-3. Posant des questions de suivi ciblées pour améliorer l'entrée
-4. Mettant à jour les champs avec de nouvelles informations
-5. Fournissant l'entrée STAR finale polie"""
+Votre objectif est d'aider les utilisateurs à articuler leurs expériences professionnelles de manière structurée et impactante, 
+mettant en valeur leurs compétences et leurs réalisations.
 
-# **Flux de travail :**
-# - Quand un utilisateur fournit une description de poste, utilisez extract_star_from_description
-# - Vérifiez l'exhaustivité avec check_star_completeness
-# - Si des champs sont manquants ou faibles, utilisez generate_clarifying_question pour poser UNE question à la fois
-# - Quand l'utilisateur fournit des informations supplémentaires, utilisez update_star_field_tool
-# - Continuez jusqu'à ce que tous les champs aient un contenu solide avec des métriques (surtout pour Résultat)
-# - Présentez le STAR final dans un format clair et professionnel
+Format STAR :
+- Situation : Plantez le contexte de votre mission, votre employeur et leurs enjeux
+- Tâche : Décrivez quelle était votre responsabilité dans cette mission
+- Action : Expliquez précisément les actions que vous avez prises
+- Résultat : Partagez les résultats obtenus grâce à vos actions (quantifiez si possible)
 
-# **Important :**
-# - Posez seulement UNE question à la fois
-# - Priorisez l'obtention de résultats quantifiables (chiffres, pourcentages, métriques)
-# - Soyez conversationnel et encourageant
-# - Montrez le brouillon STAR actuel quand vous demandez des améliorations
-# - Une fois terminé, félicitez l'utilisateur et montrez l'entrée finale polie
+Soyez encourageant, posez des questions de clarification et aidez les utilisateurs à identifier 
+les détails les plus marquants de leurs expériences."""
 
 
 # Prompt : extraire STAR 
@@ -60,65 +61,118 @@ Maintenant, convertissez cette entrée en JSON au format STAR :
 {input_text}
 """
 
-# Prompt pour générer une seule question de clarification ciblée pour un champ manquant
-QUESTION_PROMPT_TEMPLATE = """Vous êtes un assistant serviable. Étant donné la saisie originale de l'utilisateur :
+SITUATION_PROMPT = """À partir de cette description de mission : "{input}".
+Posez à l'utilisateur une question spécifique pour l'aider à décrire la SITUATION.
+Concentrez-vous sur : Quel était le contexte ? Quand et où cela s'est-il passé ? 
+Quel était le défi global ou l'environnement ?
+Gardez votre question concise et ciblée."""
 
-{input_text}
+TASK_PROMPT = """L'utilisateur a décrit cette situation : "{input}".    
+Posez une question spécifique pour l'aider à articuler la TÂCHE.
+Concentrez-vous sur : Quelle était sa responsabilité précise ? Quel objectif cherchait-il à atteindre ?
+Gardez votre question concise et ciblée."""
 
-et le brouillon STAR actuel :
+ACTION_PROMPT = """Contexte :
 
-{star_json}
+- Situation : {situation}
+- Tâche : {task}
 
-Posez EXACTEMENT UNE question concise, polie et actionnable qui permettrait à l'utilisateur de compléter le champ manquant ou faible : {field}.
-Si vous demandez des métriques numériques, donnez des exemples (par exemple, "pourcentage d'augmentation, temps économisé, nombre d'utilisateurs").
-Retournez uniquement la question."""
+Posez une question spécifique pour aider l'utilisateur à décrire les ACTIONS qu'il a entreprises.
+Concentrez-vous sur : Quelles étapes spécifiques a-t-il suivies ? Comment a-t-il abordé le problème ?
+Gardez votre question concise et ciblée."""
 
-# Prompt pour mettre à jour un seul champ avec la nouvelle réponse de l'utilisateur
-UPDATE_PROMPT_TEMPLATE = """Vous êtes un assistant. Mettez à jour UNIQUEMENT le champ `{field}` dans le JSON STAR ci-dessous en utilisant la nouvelle réponse de l'utilisateur.
-Retournez le JSON STAR complet (avec text + confidence pour chaque clé) et ne modifiez PAS les autres champs.
+RESULT_PROMPT = """Contexte :
+- Situation : {situation}
+- Tâche : {task}
+- Action : {action}
 
-STAR original :
-{star_json}
+Posez une question spécifique pour l'aider à articuler les RÉSULTATS.
+Concentrez-vous sur : Quel a été le résultat ? Peut-il quantifier l'impact ? Quel est le bénéfice pour l'empoyeur ?
+Gardez votre question concise et ciblée."""
 
-Nouvelle réponse :
-{answer}
 
-Retournez uniquement du JSON valide."""
+GENERATE_STAR_PROMPT = """Créez un description de mission au format STAR soignée et professionnelle 
+basée sur ces éléments : {input}
+Rédigez un texte cohérent (maximum 300 mots) qui s'enchaîne naturellement et serait 
+convaincant pour un futur employeur. Soyez précis et percutant."""
 
-# Message de bienvenue pour les nouvelles sessions de chat
-WELCOME_MESSAGE = "Bienvenue — collez une brève description d'un travail ou d'une tâche passée et je vous aiderai à créer une entrée STAR."
+EVALUATE_PROMPT = """Évaluez cette descrition de mission au format STAR et décidez si elle est satisfaisante :
 
-# Messages de statut
-MSG_UPDATING_FIELD = "Merci — mise à jour du champ `{field}` en cours..."
-MSG_CREATING_DRAFT = "Merci — création d'un brouillon STAR en cours..."
-MSG_SESSION_NOT_FOUND = "Session non trouvée — démarrez une nouvelle conversation."
-MSG_PARSE_ERROR = "Impossible d'analyser un brouillon STAR à partir du modèle. Essayez de reformuler la description."
-MSG_UPDATE_PARSE_ERROR = "Désolé, je n'ai pas pu analyser la mise à jour de l'assistant. Veuillez reformuler votre réponse."
+{input}
 
-# Modèles de réponse
-RESPONSE_WITH_FOLLOWUP = """Voici le brouillon que j'ai créé :
-```json
-{star_json}
-```
+Critères d'évaluation :
+1. La description est-elle claire et bien structurée ?
+2. Les actions sont-elles spécifiques et détaillées ?
+3. Les résultats sont-ils quantifiables ou mesurables ?
+4. La description serait-elle convaincante dans un CV pour postuler pour un rôle similaire ?
 
-J'ai une petite question pour améliorer le champ `{field}` :
-{question}"""
+Répondez UNIQUEMENT avec un JSON valide (sans texte avant ou après) :
+{{"is_satisfactory": true/false, "question": "votre question si amélioration nécessaire, sinon null"}}
 
-RESPONSE_UPDATE_WITH_FOLLOWUP = """Mis à jour. Brouillon STAR actuel :
-```json
-{star_json}
-```
+Si satisfaisant, mettez "question": null.
+Si amélioration nécessaire, posez UNE question précise à l'utilisateur pour obtenir plus de détails."""
 
-Question de suivi : {question}"""
 
-RESPONSE_COMPLETE = """Terminé — STAR final :
-```json
-{star_json}
-```
-Vous pouvez copier ce JSON ou modifier n'importe quel champ."""
 
-RESPONSE_DRAFT_COMPLETE = """Tout est prêt — brouillon STAR :
-```json
-{star_json}
-```
-Si vous souhaitez améliorer un champ, répondez simplement en disant par exemple 'modifier result : ...' ou répondez à la question de suivi."""
+# # Prompt pour générer une seule question de clarification ciblée pour un champ manquant
+# QUESTION_PROMPT_TEMPLATE = """Vous êtes un assistant serviable. Étant donné la saisie originale de l'utilisateur :
+
+# {input_text}
+
+# et le brouillon STAR actuel :
+
+# {star_json}
+
+# Posez EXACTEMENT UNE question concise, polie et actionnable qui permettrait à l'utilisateur de compléter le champ manquant ou faible : {field}.
+# Si vous demandez des métriques numériques, donnez des exemples (par exemple, "pourcentage d'augmentation, temps économisé, nombre d'utilisateurs").
+# Retournez uniquement la question."""
+
+# # Prompt pour mettre à jour un seul champ avec la nouvelle réponse de l'utilisateur
+# UPDATE_PROMPT_TEMPLATE = """Vous êtes un assistant. Mettez à jour UNIQUEMENT le champ `{field}` dans le JSON STAR ci-dessous en utilisant la nouvelle réponse de l'utilisateur.
+# Retournez le JSON STAR complet (avec text + confidence pour chaque clé) et ne modifiez PAS les autres champs.
+
+# STAR original :
+# {star_json}
+
+# Nouvelle réponse :
+# {answer}
+
+# Retournez uniquement du JSON valide."""
+
+# # Message de bienvenue pour les nouvelles sessions de chat
+# WELCOME_MESSAGE = "Bienvenue — collez une brève description d'un travail ou d'une tâche passée et je vous aiderai à créer une entrée STAR."
+
+# # Messages de statut
+# MSG_UPDATING_FIELD = "Merci — mise à jour du champ `{field}` en cours..."
+# MSG_CREATING_DRAFT = "Merci — création d'un brouillon STAR en cours..."
+# MSG_SESSION_NOT_FOUND = "Session non trouvée — démarrez une nouvelle conversation."
+# MSG_PARSE_ERROR = "Impossible d'analyser un brouillon STAR à partir du modèle. Essayez de reformuler la description."
+# MSG_UPDATE_PARSE_ERROR = "Désolé, je n'ai pas pu analyser la mise à jour de l'assistant. Veuillez reformuler votre réponse."
+
+# # Modèles de réponse
+# RESPONSE_WITH_FOLLOWUP = """Voici le brouillon que j'ai créé :
+# ```json
+# {star_json}
+# ```
+
+# J'ai une petite question pour améliorer le champ `{field}` :
+# {question}"""
+
+# RESPONSE_UPDATE_WITH_FOLLOWUP = """Mis à jour. Brouillon STAR actuel :
+# ```json
+# {star_json}
+# ```
+
+# Question de suivi : {question}"""
+
+# RESPONSE_COMPLETE = """Terminé — STAR final :
+# ```json
+# {star_json}
+# ```
+# Vous pouvez copier ce JSON ou modifier n'importe quel champ."""
+
+# RESPONSE_DRAFT_COMPLETE = """Tout est prêt — brouillon STAR :
+# ```json
+# {star_json}
+# ```
+# Si vous souhaitez améliorer un champ, répondez simplement en disant par exemple 'modifier result : ...' ou répondez à la question de suivi."""

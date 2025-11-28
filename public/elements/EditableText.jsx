@@ -62,64 +62,102 @@ export default function EditableText() {
   }, []);
 
   const handleSave = () => {
+    console.log('[SAVE] Button clicked');
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     
-    // Find the chat input and submit button
+    // Find the chat input
     const chatInput = document.querySelector('textarea[placeholder*="message"]') || 
                       document.querySelector('textarea[placeholder*="Message"]') ||
                       document.querySelector('form textarea');
     
-    if (chatInput) {
-      // Store original value
-      const originalValue = chatInput.value;
-      
-      // Set the value with our save prefix
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype,
-        'value'
-      ).set;
-      nativeInputValueSetter.call(chatInput, `SAVE_STAR_TEXT:${text}`);
-      
-      // Trigger input event
-      const inputEvent = new Event('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-      
-      // Trigger change event as well
-      const changeEvent = new Event('change', { bubbles: true });
-      chatInput.dispatchEvent(changeEvent);
-      
-      // Find submit button
-      const form = chatInput.closest('form');
-      let submitButton = null;
-      
-      if (form) {
-        submitButton = form.querySelector('button[type="submit"]');
-      }
-      
-      if (!submitButton) {
-        submitButton = chatInput.parentElement?.querySelector('button[type="submit"]') ||
-                      chatInput.parentElement?.querySelector('button svg')?.closest('button');
-      }
-      
-      if (submitButton) {
-        // Submit the form programmatically instead of clicking
-        if (form) {
-          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-          form.dispatchEvent(submitEvent);
-        }
-        
-        // Also try clicking as fallback
-        submitButton.click();
-        
-        // Immediately restore original value
-        requestAnimationFrame(() => {
-          nativeInputValueSetter.call(chatInput, originalValue);
-          const clearEvent = new Event('input', { bubbles: true });
-          chatInput.dispatchEvent(clearEvent);
-        });
-      }
+    console.log('[SAVE] Chat input found:', !!chatInput);
+    
+    if (!chatInput) {
+      console.error('Could not find chat input');
+      return;
     }
+    
+    // Try multiple ways to find the submit button
+    let submitButton = null;
+    
+    // Method 1: Look for form
+    const form = chatInput.closest('form');
+    if (form) {
+      submitButton = form.querySelector('button[type="submit"]');
+      console.log('[SAVE] Found button via form');
+    }
+    
+    // Method 2: Look in parent container
+    if (!submitButton) {
+      const container = chatInput.closest('div[class*="input"]') || chatInput.parentElement;
+      submitButton = container?.querySelector('button[type="submit"]');
+      console.log('[SAVE] Found button via container:', !!submitButton);
+    }
+    
+    // Method 3: Look for any button with send icon near textarea
+    if (!submitButton) {
+      const allButtons = document.querySelectorAll('button');
+      submitButton = Array.from(allButtons).find(btn => {
+        const svg = btn.querySelector('svg');
+        const isNearInput = chatInput.parentElement?.contains(btn) || 
+                           chatInput.parentElement?.parentElement?.contains(btn);
+        return svg && isNearInput;
+      });
+      console.log('[SAVE] Found button via SVG search:', !!submitButton);
+    }
+    
+    // Method 4: Last resort - find ANY submit button
+    if (!submitButton) {
+      submitButton = document.querySelector('button[type="submit"]');
+      console.log('[SAVE] Found button via document query:', !!submitButton);
+    }
+    
+    console.log('[SAVE] Final submit button found:', !!submitButton);
+    console.log('[SAVE] Submit button disabled:', submitButton?.disabled);
+    
+    if (!submitButton) {
+      console.error('Could not find submit button after all methods');
+      return;
+    }
+    
+    // Store original value
+    const originalValue = chatInput.value;
+    console.log('[SAVE] Original value:', originalValue);
+    
+    // Set the value with our save prefix
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value'
+    ).set;
+    nativeInputValueSetter.call(chatInput, `SAVE_STAR_TEXT:${text}`);
+    console.log('[SAVE] Set new value with prefix');
+    
+    // Trigger input event
+    const inputEvent = new Event('input', { bubbles: true });
+    chatInput.dispatchEvent(inputEvent);
+    console.log('[SAVE] Dispatched input event');
+    
+    // Wait a tiny bit for the button to become enabled
+    setTimeout(() => {
+      console.log('[SAVE] Attempting to click submit button');
+      console.log('[SAVE] Button disabled status:', submitButton.disabled);
+      
+      if (!submitButton.disabled) {
+        submitButton.click();
+        console.log('[SAVE] Submit button clicked!');
+      } else {
+        console.error('[SAVE] Submit button is disabled, cannot click');
+      }
+      
+      // Clear the input
+      setTimeout(() => {
+        nativeInputValueSetter.call(chatInput, originalValue);
+        const clearEvent = new Event('input', { bubbles: true });
+        chatInput.dispatchEvent(clearEvent);
+        console.log('[SAVE] Input cleared');
+      }, 50);
+    }, 100);
   };
 
   return (
