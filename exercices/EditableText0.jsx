@@ -1,5 +1,5 @@
 import { Textarea } from "@/components/ui/textarea";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function EditableText() {
   // Access props from global scope (Chainlit injects them globally)
@@ -7,71 +7,57 @@ export default function EditableText() {
   const [text, setText] = useState(initialText);
   const [saved, setSaved] = useState(false);
   const [hasEdited, setHasEdited] = useState(false);
-  const observerRef = useRef<MutationObserver | null>(null);
 
-  // Update from props when new text is generated (but preserve user edits if they're actively editing)
+  // Only update from props if user hasn't edited yet
   useEffect(() => {
-    if (props.initial && props.initial !== text) {
-      // Only auto-update if user hasn't made recent edits
-      if (!hasEdited) {
-        setText(props.initial);
-      }
-    }
-  }, [props.initial]);
-
-  // Reset hasEdited flag when props change significantly (new generation)
-  useEffect(() => {
-    if (props.initial) {
-      setHasEdited(false);
+    if (!hasEdited && props.initial) {
       setText(props.initial);
     }
-  }, [props.initial]);
+  }, [props.initial, hasEdited]);
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextChange = (e) => {
     setText(e.target.value);
     setHasEdited(true);
   };
 
   useEffect(() => {
-    // Inject CSS to constrain the main app
+    // Inject CSS to constrain the main app and hide save messages
     const style = document.createElement('style');
-    style.id = 'editable-text-styles';
     style.innerHTML = `
       #root {
         max-width: 50vw !important;
         width: 50vw !important;
       }
+      
+      /* Hide messages that start with SAVE_STAR_TEXT from chat history */
+      .step:has([class*="content"]:first-child):has([class*="content"] > div > p:first-child) {
+        &:has(p:first-child:is(:first-letter)) {
+          /* Check if message starts with SAVE_STAR_TEXT */
+        }
+      }
+      
+      /* More aggressive - hide any message containing SAVE_STAR_TEXT */
+      [class*="message"]:has(*:contains("SAVE_STAR_TEXT")),
+      .step:has(*:contains("SAVE_STAR_TEXT")) {
+        display: none !important;
+      }
     `;
+    document.head.appendChild(style);
     
-    // Only add if not already present
-    if (!document.getElementById('editable-text-styles')) {
-      document.head.appendChild(style);
-    }
-    
-    // Observer to hide ONLY messages that contain the exact SAVE_STAR_TEXT: prefix
-    // This is more targeted to avoid hiding legitimate messages
-    observerRef.current = new MutationObserver(() => {
-      // Find all message elements
-      document.querySelectorAll('[class*="message"], .step, [class*="MessageContent"]').forEach(el => {
-        const textContent = el.textContent || '';
-        // Only hide if it starts with SAVE_STAR_TEXT: (the actual save command)
-        // Be very specific to avoid hiding other messages
-        if (textContent.trim().startsWith('SAVE_STAR_TEXT:')) {
-          (el as HTMLElement).style.display = 'none';
+    // Also actively remove SAVE_STAR_TEXT messages from DOM
+    const observer = new MutationObserver(() => {
+      document.querySelectorAll('[class*="message"], .step').forEach(el => {
+        if (el.textContent.includes('SAVE_STAR_TEXT:')) {
+          el.style.display = 'none';
         }
       });
     });
     
-    observerRef.current.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, { childList: true, subtree: true });
     
     return () => {
-      const styleEl = document.getElementById('editable-text-styles');
-      if (styleEl) {
-        document.head.removeChild(styleEl);
-      }
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
+      document.head.removeChild(style);
+      observer.disconnect();
     };
   }, []);
 
@@ -83,7 +69,7 @@ export default function EditableText() {
     // Find the chat input
     const chatInput = document.querySelector('textarea[placeholder*="message"]') || 
                       document.querySelector('textarea[placeholder*="Message"]') ||
-                      document.querySelector('form textarea') as HTMLTextAreaElement | null;
+                      document.querySelector('form textarea');
     
     console.log('[SAVE] Chat input found:', !!chatInput);
     
@@ -93,7 +79,7 @@ export default function EditableText() {
     }
     
     // Try multiple ways to find the submit button
-    let submitButton: HTMLButtonElement | null = null;
+    let submitButton = null;
     
     // Method 1: Look for form
     const form = chatInput.closest('form');
@@ -105,7 +91,7 @@ export default function EditableText() {
     // Method 2: Look in parent container
     if (!submitButton) {
       const container = chatInput.closest('div[class*="input"]') || chatInput.parentElement;
-      submitButton = container?.querySelector('button[type="submit"]') || null;
+      submitButton = container?.querySelector('button[type="submit"]');
       console.log('[SAVE] Found button via container:', !!submitButton);
     }
     
@@ -117,7 +103,7 @@ export default function EditableText() {
         const isNearInput = chatInput.parentElement?.contains(btn) || 
                            chatInput.parentElement?.parentElement?.contains(btn);
         return svg && isNearInput;
-      }) as HTMLButtonElement || null;
+      });
       console.log('[SAVE] Found button via SVG search:', !!submitButton);
     }
     
@@ -143,40 +129,35 @@ export default function EditableText() {
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype,
       'value'
-    )?.set;
+    ).set;
+    nativeInputValueSetter.call(chatInput, `SAVE_STAR_TEXT:${text}`);
+    console.log('[SAVE] Set new value with prefix');
     
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(chatInput, `SAVE_STAR_TEXT:${text}`);
-      console.log('[SAVE] Set new value with prefix');
+    // Trigger input event
+    const inputEvent = new Event('input', { bubbles: true });
+    chatInput.dispatchEvent(inputEvent);
+    console.log('[SAVE] Dispatched input event');
+    
+    // Wait a tiny bit for the button to become enabled
+    setTimeout(() => {
+      console.log('[SAVE] Attempting to click submit button');
+      console.log('[SAVE] Button disabled status:', submitButton.disabled);
       
-      // Trigger input event
-      const inputEvent = new Event('input', { bubbles: true });
-      chatInput.dispatchEvent(inputEvent);
-      console.log('[SAVE] Dispatched input event');
+      if (!submitButton.disabled) {
+        submitButton.click();
+        console.log('[SAVE] Submit button clicked!');
+      } else {
+        console.error('[SAVE] Submit button is disabled, cannot click');
+      }
       
-      // Wait a tiny bit for the button to become enabled
+      // Clear the input
       setTimeout(() => {
-        console.log('[SAVE] Attempting to click submit button');
-        console.log('[SAVE] Button disabled status:', submitButton?.disabled);
-        
-        if (submitButton && !submitButton.disabled) {
-          submitButton.click();
-          console.log('[SAVE] Submit button clicked!');
-        } else {
-          console.error('[SAVE] Submit button is disabled, cannot click');
-        }
-        
-        // Clear the input
-        setTimeout(() => {
-          if (nativeInputValueSetter) {
-            nativeInputValueSetter.call(chatInput, originalValue);
-            const clearEvent = new Event('input', { bubbles: true });
-            chatInput.dispatchEvent(clearEvent);
-            console.log('[SAVE] Input cleared');
-          }
-        }, 50);
-      }, 100);
-    }
+        nativeInputValueSetter.call(chatInput, originalValue);
+        const clearEvent = new Event('input', { bubbles: true });
+        chatInput.dispatchEvent(clearEvent);
+        console.log('[SAVE] Input cleared');
+      }, 50);
+    }, 100);
   };
 
   return (
@@ -206,17 +187,16 @@ export default function EditableText() {
             zIndex: 10,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
           }}>
-            ✓ Sauvegardé
+            ✓ Saved
           </div>
         )}
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Texte STAR</h3>
+          <h3 className="text-lg font-semibold">Edit Response</h3>
         </div>
         <Textarea
           value={text}
           onChange={handleTextChange}
           className="flex-1 resize-none mb-4"
-          placeholder="Le texte STAR apparaîtra ici au fur et à mesure..."
         />
         <div className="flex justify-end gap-2">
           <button 
@@ -232,7 +212,7 @@ export default function EditableText() {
               fontWeight: '500'
             }}
           >
-            Sauvegarder
+            Save Changes
           </button>
         </div>
       </div>

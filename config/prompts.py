@@ -61,38 +61,30 @@ Maintenant, convertissez cette entrée en JSON au format STAR :
 {input_text}
 """
 
-SITUATION_PROMPT = """À partir de cette description de mission : "{input}".
-Posez à l'utilisateur une question spécifique pour l'aider à décrire la SITUATION.
+SITUATION_PROMPT = """À partir de cette description de mission : "{input}",
+posez à l'utilisateur une question spécifique pour l'aider à décrire la SITUATION.
 Concentrez-vous sur : Quel était le contexte ? Quand et où cela s'est-il passé ? 
 Quel était le défi global ou l'environnement ?
 Gardez votre question concise et ciblée."""
 
-TASK_PROMPT = """L'utilisateur a décrit cette situation : "{input}".    
-Posez une question spécifique pour l'aider à articuler la TÂCHE.
+TASK_PROMPT = """À partir de cette description de mission : "{input}",    
+posez une question spécifique pour l'aider à articuler la TÂCHE.
 Concentrez-vous sur : Quelle était sa responsabilité précise ? Quel objectif cherchait-il à atteindre ?
 Gardez votre question concise et ciblée."""
 
-ACTION_PROMPT = """Contexte :
-
-- Situation : {situation}
-- Tâche : {task}
-
-Posez une question spécifique pour aider l'utilisateur à décrire les ACTIONS qu'il a entreprises.
+ACTION_PROMPT = """À partir de cette description de mission : "{input}, 
+posez une question spécifique pour aider l'utilisateur à décrire les ACTIONS qu'il a entreprises.
 Concentrez-vous sur : Quelles étapes spécifiques a-t-il suivies ? Comment a-t-il abordé le problème ?
 Gardez votre question concise et ciblée."""
 
-RESULT_PROMPT = """Contexte :
-- Situation : {situation}
-- Tâche : {task}
-- Action : {action}
-
+RESULT_PROMPT = """À partir de cette description de mission : "{input},
 Posez une question spécifique pour l'aider à articuler les RÉSULTATS.
 Concentrez-vous sur : Quel a été le résultat ? Peut-il quantifier l'impact ? Quel est le bénéfice pour l'empoyeur ?
 Gardez votre question concise et ciblée."""
 
-
 GENERATE_STAR_PROMPT = """Créez un description de mission au format STAR soignée et professionnelle 
-basée sur ces éléments : {input}
+basée les éléments suivants: {input}
+Ne rajouter pas d'éléments qui n'ont pas été fournis par l'utilisateur. Contentez-vous de reformuler les informations fournies.
 Rédigez un texte cohérent (maximum 300 mots) qui s'enchaîne naturellement et serait 
 convaincant pour un futur employeur. Soyez précis et percutant."""
 

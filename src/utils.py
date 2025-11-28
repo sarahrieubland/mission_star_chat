@@ -1,4 +1,3 @@
-
 import re
 import json
 
@@ -69,3 +68,20 @@ def star_txt_to_json(text_str: str) -> dict:
         "Action": action.strip(),
         "Results": result.strip()
     }
+
+
+def build_star_from_components(state):
+    """Function to combine the components that are available in the state"""
+
+    components = []
+    if state.get('situation'):
+        components.append(f"SITUATION: {state['situation']}")
+    if state.get('task'):
+        components.append(f"TÂCHE: {state['task']}")
+    if state.get('action'):
+        components.append(f"ACTION: {state['action']}")
+    if state.get('result'):
+        components.append(f"RÉSULTAT: {state['result']}")    
+    components_text = "\n".join(components)
+
+    return components, components_text

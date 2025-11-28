@@ -58,4 +58,6 @@ J'ai developpé du code python avec chainlit et base sur une infrastructure on p
 Avatar for Assistant Mission STAR
 Quels résultats concrets avez-vous obtenus grâce au développement de ce chatbot ? Par exemple, avez-vous pu mesurer une réduction du temps que les collaborateurs passaient à chercher des informations, ou une augmentation de leur productivité ?
 
-Oui les collaborateurs qui on teste le chatbot ont pu juger du temps gagne pour trouve la bonne information. grace a ce projet de proof of concept, nous avons pu convaincre le directeur d'investir dans un projet long terme pour mettre en place quelque chose de plus durable
+Oui les collaborateurs qui on teste le chatbot ont pu juger du temps gagne pour trouve la bonne information. grace a ce projet de proof of concept, nous avons pu convaincre le directeur d'investir dans un projet long terme pour mettre en place quelque chose de plus durable.
+
+Les collaborateurs ont gagné 15min par jour en moyenne.
