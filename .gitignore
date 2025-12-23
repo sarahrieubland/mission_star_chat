@@ -1,6 +1,7 @@
 *.env
 *.chainlit/
 __pycache__
-*.venv
-*older_versions/
+venv/
+*older_versions_not_git/
 *.vscode/
+.python-version

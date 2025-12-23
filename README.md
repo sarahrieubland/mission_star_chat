@@ -3,7 +3,7 @@ Chat to reformulate descriptions into STAR
 
 ### 1. Install requirements
 
-Create environment with python 3.11 (for langfus compatibility) and activate
+Create environment with python 3.11 (for langfuse compatibility) and activate
 ```
 python3 -m venv .venv
 source .venv/bin/activate
@@ -17,6 +17,10 @@ If you need to re-create the environement from scratch:
 ```
 deactivate 2>/dev/null
 rm -rf .venv
+```
+To update the requirements file : 
+```
+pip freeze > requirements.txt
 ```
 
 ## 2. Environment variables .env
