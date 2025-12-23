@@ -341,9 +341,9 @@ def format_star_text_from_state(state: STARState) -> str:
     
     text = (
         f"Situation:\n{situation}\n\n"
-        f"Tâche:\n{task}\n\n"
-        f"Action:\n{action}\n\n"
-        f"Résultat:\n{result}"
+        f"Tâches:\n{task}\n\n"
+        f"Actions:\n{action}\n\n"
+        f"Résultats:\n{result}"
     )
     
     return text
@@ -492,9 +492,9 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
     parsed = star_txt_to_json(llm_response)
     if parsed:
         extracted["situation"] = parsed.get("Situation", parsed.get("situation", "")).strip()
-        extracted["task"] = parsed.get("Tasks", parsed.get("Tâche", parsed.get("task", ""))).strip()
-        extracted["action"] = parsed.get("Action", parsed.get("action", "")).strip()
-        extracted["result"] = parsed.get("Results", parsed.get("Résultat", parsed.get("result", ""))).strip()
+        extracted["task"] = parsed.get("Tasks", parsed.get("Tâches", parsed.get("task", ""))).strip()
+        extracted["action"] = parsed.get("Actions", parsed.get("action", "")).strip()
+        extracted["result"] = parsed.get("Results", parsed.get("Résultats", parsed.get("result", ""))).strip()
     else:
         patterns = {
             "situation": [r"situation\s*:", r"\*\*situation\*\*\s*:?", r"situation\s*\n"],
@@ -550,9 +550,9 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
     
     text = (
         f"Situation:\n{final['situation']}\n\n"
-        f"Tâche:\n{final['task']}\n\n"
-        f"Action:\n{final['action']}\n\n"
-        f"Résultat:\n{final['result']}"
+        f"Tâches:\n{final['task']}\n\n"
+        f"Actions:\n{final['action']}\n\n"
+        f"Résultats:\n{final['result']}"
     )
     
     return text
