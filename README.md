@@ -56,3 +56,17 @@ gather_info → generate → evaluate
                                     evaluate
                                         ↓
                                       ...
+
+
+## 6. Cloudflare tunnel 
+
+For a quick (ephemeral) tunnel to expose the chainlit application on a public url, run:
+```
+chainlit run app.py --port 8000
+cloudflared tunnel --url http://localhost:8000
+
+```
+The temporary url will be printed (like https://random-string.trycloudflare.com).
+
+
+## 7. Deploy with Render

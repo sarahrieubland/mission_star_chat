@@ -43,21 +43,22 @@ Le projet a été livré dans les délais et respecté le budget initial. Le nou
 ---
 
 ma mission est pour l'etat de geneve. Je travaille sur des chabot avec systeme RAG. Le projet permet de faire gagner du temps aux collaborateurs
-Avatar for Assistant Mission STAR
+---
+S
 Pour mieux comprendre la situation, pourrais-tu préciser quand et où ce projet a eu lieu, ainsi que les principaux défis auxquels l'État de Genève faisait face avant la mise en place des chatbots avec le système RAG ?
-
 Ce projet a eu lieu a l'OCSIN. Avant ce projet, beaucoup d'offices et collaborateurs devaient passer du temps a trouver les informations pour leur travail de facon manuelle.
-Avatar for Assistant Mission STAR
+---
+T
 Quelle était votre responsabilité spécifique dans ce projet pour améliorer l'accès aux informations, et quel objectif cherchiez-vous à atteindre pour les offices et collaborateurs ?
-
 Mon role en tant que Data Scientist etait de developper un chabot pour permettre aux collaborateurs d'utiliser l'IA pour leur travail.
-Avatar for Assistant Mission STAR
+---
+A
 Quelles étapes spécifiques avez-vous suivies pour développer le chatbot, et comment avez-vous abordé les défis techniques ou les besoins des utilisateurs tout au long du processus ?
-
 J'ai developpé du code python avec chainlit et base sur une infrastructure on premise. pour surmonter les defis techniques, j'ai travaille de facon collaborative avec le métier et les integrateurs
-Avatar for Assistant Mission STAR
+---
+R
 Quels résultats concrets avez-vous obtenus grâce au développement de ce chatbot ? Par exemple, avez-vous pu mesurer une réduction du temps que les collaborateurs passaient à chercher des informations, ou une augmentation de leur productivité ?
-
 Oui les collaborateurs qui on teste le chatbot ont pu juger du temps gagne pour trouve la bonne information. grace a ce projet de proof of concept, nous avons pu convaincre le directeur d'investir dans un projet long terme pour mettre en place quelque chose de plus durable.
 
+RR
 Les collaborateurs ont gagné 15min par jour en moyenne.

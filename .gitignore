@@ -1,3 +1,6 @@
 *.env
 *.chainlit/
 __pycache__
+*.venv
+*older_versions/
+*.vscode/
