@@ -28,8 +28,22 @@ pip freeze > requirements.txt
 in the `.env` file at the root of the project, you need to put the secrets:
 
 ```
+# OpenAI
 OPENAI_API_KEY=
+
+# LangSmith
+LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=
+
+# App parameters
+MODEL_NAME=gpt-4
+TEMPERATURE=0.01
+VERBOSE=True
+
+# App Authentication
+APP_USERNAME=
+APP_PASSWORD=
+CHAINLIT_AUTH_SECRET=
 ```
 
 ## 3. Run chainlit app
@@ -62,7 +76,7 @@ gather_info → generate → evaluate
                                       ...
 
 
-## 6. Cloudflare tunnel 
+## 6. (Optional) Cloudflare tunnel for development 
 
 For a quick (ephemeral) tunnel to expose the chainlit application on a public url, run:
 ```
@@ -73,4 +87,11 @@ cloudflared tunnel --url http://localhost:8000
 The temporary url will be printed (like https://random-string.trycloudflare.com).
 
 
-## 7. Deploy with Render
+## 7. Deploy with Render + authentification
+
+On https://dashboard.render.com/, to create the web service. This is currently based on the branch 'dev' in Github repo.
+
+To access the application : https://mission-star-chat.onrender.com 
+
+To authenticate, enter the username and password provided separately.
+

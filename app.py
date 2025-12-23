@@ -946,6 +946,29 @@ Votre texte a été validé.
         await cl.Message(content="📝 Modifications prises en compte. Continuez à répondre aux questions pour améliorer votre texte STAR.").send()
 
 
+# --- Password-based Authentication ---
+@cl.password_auth_callback
+def auth_callback(username: str, password: str) -> cl.User | None:
+    """Verify username and password for login.
+    
+    Set APP_USERNAME and APP_PASSWORD in .env file.
+    If not set, authentication is skipped.
+    """
+    expected_username = os.getenv("APP_USERNAME", "")
+    expected_password = os.getenv("APP_PASSWORD", "")
+    
+    # If no credentials configured, allow all access
+    if not expected_username or not expected_password:
+        return cl.User(identifier="anonymous", metadata={"role": "user"})
+    
+    # Check credentials
+    if username == expected_username and password == expected_password:
+        return cl.User(identifier=username, metadata={"role": "user"})
+    
+    # Authentication failed
+    return None
+
+
 @cl.on_chat_start
 async def start():
     """Initialize the chat session"""
