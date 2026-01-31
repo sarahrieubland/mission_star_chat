@@ -5,18 +5,20 @@ Modèles de prompts pour l'agent chatbot STAR.
 
 WELCOME_MESSAGE = """👋 **Bienvenu!**
 
-Je vais vous aider à créer une description de votre mission au format STAR (Situation, Tâche, Action, Résultat) percutante pour alimenter votre CV.
+Je vais vous aider à créer une description de votre mission au format STAR (Situation, Tâches, Actions, Résultats) percutante pour alimenter votre CV.
 
 **Pour commencer, décrivez une expérience professionnelle, mission, ou une réalisation 
 que vous souhaitez transformer au format STAR.**
 
-Par exemple : "J'ai dirigé un projet pour améliorer la satisfaction client dans mon entreprise" 
-ou "J'ai résolu un problème technique majeur lors d'un lancement de produit"."""
+Vous pouvez également insérer un brouillon ou un texte qui decrit votre mission."""
+
+#Par exemple : "J'ai dirigé un projet pour améliorer la satisfaction client dans mon entreprise" 
+#ou "J'ai résolu un problème technique majeur lors d'un lancement de produit".
 
 
 # --- Agent System Prompt ---
 AGENT_SYSTEM_PROMPT = """Vous êtes un assistant expert pour un entreprise de consultants, qui aide les collaborateurs 
-de l'entreprise à créer des entrées au format STAR (Situation, Tâche, Action, Résultat) sur leurs missons chez des clients 
+de l'entreprise à créer des entrées au format STAR (Situation, Tâches, Actions, Résultats) sur leurs missons chez des clients 
 et sur leurs expériences professionnelles passées.
 
 Votre objectif est d'aider les utilisateurs à articuler leurs expériences professionnelles de manière structurée et impactante, 
@@ -35,7 +37,7 @@ Description du format STAR souhaité:
 Example de description au format STAR souhaité: 
 
 Situation
-Un département de l'État souhaitait renforcer la gestion, la sécurisation et la gouvernance de ses documents. 
+Un département de l'administration publique souhaitait renforcer la gestion, la sécurisation et la gouvernance de ses documents. 
 Les outils existants étaient limités et ne répondaient plus aux exigences en matière de confidentialité, d'accès et de conformité
 
 Tâches
@@ -53,11 +55,11 @@ Actions
 Résultats
 - Une vision claire et partagée de la solution documentaire à adopter.
 - Un cadre de gouvernance défini, facilitant la mise en œuvre, le pilotage et la conformité future.
-- Une feuille de route opérationnelle permettant au département de l'État d'engager son projet en toute sécurité et avec une trajectoire maîtrisée.
+- Une feuille de route opérationnelle permettant au département d'engager son projet en toute sécurité et avec une trajectoire maîtrisée.
 """
 
 # Prompt : extraire STAR 
-EXTRACTION_PROMPT_TEMPLATE = """
+EXTRACTION_PROMPT = """
 Vous êtes un assistant qui transforme une description de mission ou de travail en un objet JSON 
 structuré selon le modèle STAR (Situation, Task, Action, Result).
 
@@ -73,12 +75,12 @@ Exemple d'entrée :
 en coordonnant les équipes techniques et métiers, et en assurant la mise en production dans les délais."
 
 Exemple de sortie :
-{
+{{
   "situation": "Le système d'information logistique du client était obsolète et mal intégré aux autres outils.",
   "task": "Piloter la refonte du système d'information pour améliorer la fiabilité et l'efficacité opérationnelle.",
   "action": "Coordination des équipes techniques et métiers, suivi du planning et du budget, pilotage du déploiement et des tests.",
   "result": "Mise en production réussie dans les délais, amélioration de la performance logistique et satisfaction du client."
-}
+}}
 
 Maintenant, convertissez cette entrée en JSON au format STAR :
 

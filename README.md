@@ -46,20 +46,30 @@ APP_PASSWORD=
 CHAINLIT_AUTH_SECRET=
 ```
 
-## 3. Run chainlit app
+## 3. Langsmith
+
+LangSmith is used for observability and prompt management. 
+To test that the connection to Langsmith functions for prompt storage (with "test_prompt"): 
+
+```
+python3 src/prompt_manager.py
+```
+
+To push the prompts from `src/config_prompts.py` to Langsmith for version control, run:
+
+```
+python3 src/setup_prompts.py 
+```
+Prompts can be either edited locally or directly from LangSmith UI. 
+
+## 4. Run chainlit app
 
 ```
 chainlit run app.py -w
 ```
 
-## 4. Langsmith
 
-Store the prompts in Langsmith
-```
-python3 -c "from app_agent_combined import push_all_prompts_to_hub; push_all_prompts_to_hub()"
-```
-
-## 4. Langgraph workflow for the agentic chatbot
+## 5. Langgraph workflow for the agentic chatbot
 
 gather_info → generate → evaluate 
                            ↓

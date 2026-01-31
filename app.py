@@ -33,9 +33,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from src.utils import star_json_to_txt, star_txt_to_json, build_star_from_components
-
-# Import local prompts as fallback
-from config import prompts as local_prompts
+from src.prompt_manager import PromptManager
 
 
 # --- Environment & Configuration ---
@@ -76,198 +74,75 @@ llm = ChatOpenAI(
 _event_handlers = {}
 
 
-# --- Prompt Management ---
-
-class PromptManager:
-    """Manages prompts from LangSmith Hub with local fallback.
-    
-    Uses the LangSmith client directly for pull_prompt and push_prompt operations.
-    """
-    
-    def __init__(self, handle: str = "", use_hub: bool = True, client: Client = None):
-        self.handle = handle
-        self.use_hub = use_hub and bool(handle)
-        self.client = client
-        self._cache = {}
-        
-        if VERBOSE:
-            if self.use_hub:
-                print(f"📝 PromptManager: Using LangSmith Hub (handle: {handle})")
-            else:
-                print(f"📝 PromptManager: Using local prompts (Hub disabled or no handle)")
-    
-    def _get_hub_prompt_name(self, prompt_name: str) -> str:
-        """Get the full hub prompt name with handle."""
-        return f"{self.handle}/{prompt_name}"
-    
-    def get_prompt(self, prompt_name: str, fallback: str = "") -> str:
-        """
-        Get a prompt from LangSmith Hub or fall back to local.
-        
-        Args:
-            prompt_name: Name of the prompt in the hub (e.g., "star-situation-prompt")
-            fallback: Local fallback prompt string
-            
-        Returns:
-            The prompt template string
-        """
-        # Check cache first
-        if prompt_name in self._cache:
-            return self._cache[prompt_name]
-        
-        prompt_template = fallback
-        
-        if self.use_hub and self.client:
-            try:
-                hub_name = self._get_hub_prompt_name(prompt_name)
-                if VERBOSE:
-                    print(f"   📥 Pulling prompt from Hub: {hub_name}")
-                
-                # Pull from LangSmith Hub using client.pull_prompt()
-                prompt = self.client.pull_prompt(hub_name)
-                
-                # Extract the template string from the prompt object
-                if hasattr(prompt, 'template'):
-                    prompt_template = prompt.template
-                elif hasattr(prompt, 'messages') and len(prompt.messages) > 0:
-                    # For ChatPromptTemplate, get the human message template
-                    for msg in prompt.messages:
-                        if hasattr(msg, 'prompt') and hasattr(msg.prompt, 'template'):
-                            prompt_template = msg.prompt.template
-                            break
-                elif hasattr(prompt, 'first') and hasattr(prompt.first, 'prompt'):
-                    # Handle RunnableSequence
-                    prompt_template = prompt.first.prompt.template if hasattr(prompt.first.prompt, 'template') else str(prompt)
-                else:
-                    prompt_template = str(prompt)
-                
-                if VERBOSE:
-                    print(f"   ✅ Loaded prompt from Hub: {prompt_name}")
-                    
-            except Exception as e:
-                if VERBOSE:
-                    print(f"   ⚠️ Failed to load prompt '{prompt_name}' from Hub: {e}")
-                    print(f"   📝 Using local fallback")
-                prompt_template = fallback
-        
-        # Cache the result
-        self._cache[prompt_name] = prompt_template
-        return prompt_template
-    
-    def push_prompt(self, prompt_name: str, prompt_template: str, description: str = "") -> bool:
-        """
-        Push a prompt to LangSmith Hub.
-        
-        Args:
-            prompt_name: Name for the prompt in the hub
-            prompt_template: The prompt template string
-            description: Optional description
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.use_hub or not self.client:
-            if VERBOSE:
-                print(f"   ⚠️ Cannot push prompt: Hub disabled or client not initialized")
-            return False
-        
-        try:
-            from langchain_core.prompts import PromptTemplate
-            
-            hub_name = self._get_hub_prompt_name(prompt_name)
-            
-            # Create a PromptTemplate object
-            prompt = PromptTemplate.from_template(prompt_template)
-            
-            # Push to hub using client.push_prompt()
-            self.client.push_prompt(hub_name, object=prompt, description=description)
-            
-            if VERBOSE:
-                print(f"   ✅ Pushed prompt to Hub: {hub_name}")
-            return True
-            
-        except Exception as e:
-            if VERBOSE:
-                print(f"   ❌ Failed to push prompt '{prompt_name}': {e}")
-            return False
-    
-    # Convenience properties for each prompt
-    @property
-    def AGENT_SYSTEM_PROMPT(self) -> str:
-        return self.get_prompt("star-agent-system", local_prompts.AGENT_SYSTEM_PROMPT)
-    
-    @property
-    def SITUATION_PROMPT(self) -> str:
-        return self.get_prompt("star-situation", local_prompts.SITUATION_PROMPT)
-    
-    @property
-    def TASK_PROMPT(self) -> str:
-        return self.get_prompt("star-task", local_prompts.TASK_PROMPT)
-    
-    @property
-    def ACTION_PROMPT(self) -> str:
-        return self.get_prompt("star-action", local_prompts.ACTION_PROMPT)
-    
-    @property
-    def RESULT_PROMPT(self) -> str:
-        return self.get_prompt("star-result", local_prompts.RESULT_PROMPT)
-    
-    @property
-    def GENERATE_STAR_PROMPT(self) -> str:
-        return self.get_prompt("star-generate", local_prompts.GENERATE_STAR_PROMPT)
-    
-    @property
-    def EVALUATE_PROMPT(self) -> str:
-        return self.get_prompt("star-evaluate", local_prompts.EVALUATE_PROMPT)
-    
-    @property
-    def WELCOME_MESSAGE(self) -> str:
-        return self.get_prompt("star-welcome", local_prompts.WELCOME_MESSAGE)
-
-
 # Initialize prompt manager
 prompts = PromptManager(handle=LANGSMITH_HANDLE, use_hub=USE_HUB_PROMPTS, client=ls_client)
 
 
-# --- Helper function to push all prompts to Hub ---
-def push_all_prompts_to_hub():
+def extract_star_from_text(input_text: str) -> dict:
     """
-    One-time function to push all local prompts to LangSmith Hub.
-    Run this once to set up your prompts in the Hub.
+    Extract STAR components from user's initial job description.
     
-    Usage:
-        python -c "from app import push_all_prompts_to_hub; push_all_prompts_to_hub()"
+    This is a pure extraction step - no generation or embellishment.
+    Returns a dict with keys: situation, task, action, result
+    Empty strings for components not found in the input.
     """
-    if not LANGSMITH_HANDLE:
-        print("❌ LANGSMITH_HANDLE not set. Please set it in .env")
-        return
+    if VERBOSE:
+        print("\n" + "="*50)
+        print("🔍 INITIAL STAR EXTRACTION")
+        print("="*50)
+        print(f"   Input: {input_text[:200]}...")
     
-    if not ls_client:
-        print("❌ LangSmith client not initialized. Check your LANGSMITH_API_KEY")
-        return
+    prompt = prompts.EXTRACTION_PROMPT.format(input_text=input_text)
     
-    print("📤 Pushing all prompts to LangSmith Hub...")
+    # Call LLM for extraction (no system prompt needed, instructions are in the prompt)
+    response = call_llm(prompt, system="", run_name="initial_star_extraction")
     
-    prompt_configs = [
-        ("star-agent-system", local_prompts.AGENT_SYSTEM_PROMPT, "System prompt for STAR career coach agent"),
-        ("star-situation", local_prompts.SITUATION_PROMPT, "Prompt to ask about the Situation component"),
-        ("star-task", local_prompts.TASK_PROMPT, "Prompt to ask about the Task component"),
-        ("star-action", local_prompts.ACTION_PROMPT, "Prompt to ask about the Action component"),
-        ("star-result", local_prompts.RESULT_PROMPT, "Prompt to ask about the Result component"),
-        ("star-generate", local_prompts.GENERATE_STAR_PROMPT, "Prompt to generate STAR text from components"),
-        ("star-evaluate", local_prompts.EVALUATE_PROMPT, "Prompt to evaluate STAR text quality"),
-        ("star-welcome", local_prompts.WELCOME_MESSAGE, "Welcome message for the STAR generator"),
-    ]
-    
-    pm = PromptManager(handle=LANGSMITH_HANDLE, use_hub=True, client=ls_client)
-    
-    for name, template, description in prompt_configs:
-        success = pm.push_prompt(name, template, description)
-        status = "✅" if success else "❌"
-        print(f"   {status} {name}")
-    
-    print("\n✅ Done! You can now edit prompts in LangSmith Hub:")
-    print(f"   https://smith.langchain.com/hub/{LANGSMITH_HANDLE}")
+    # Parse JSON response
+    try:
+        # Clean response if needed (remove markdown code blocks)
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            # Extract content between code blocks
+            parts = cleaned.split("```")
+            if len(parts) >= 2:
+                cleaned = parts[1]
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+        
+        extracted = json.loads(cleaned)
+        
+        # Ensure all keys exist
+        result = {
+            "situation": extracted.get("situation", "").strip(),
+            "task": extracted.get("task", "").strip(),
+            "action": extracted.get("action", "").strip(),
+            "result": extracted.get("result", "").strip()
+        }
+        
+        if VERBOSE:
+            print("   ✅ Extraction successful:")
+            print(f"      situation: {bool(result['situation'])} - '{result['situation'][:50]}...' " if result['situation'] else "      situation: (empty)")
+            print(f"      task: {bool(result['task'])} - '{result['task'][:50]}...' " if result['task'] else "      task: (empty)")
+            print(f"      action: {bool(result['action'])} - '{result['action'][:50]}...' " if result['action'] else "      action: (empty)")
+            print(f"      result: {bool(result['result'])} - '{result['result'][:50]}...' " if result['result'] else "      result: (empty)")
+            print("="*50 + "\n")
+        
+        return result
+        
+    except (json.JSONDecodeError, KeyError) as e:
+        if VERBOSE:
+            print(f"   ⚠️ Failed to parse extraction response: {e}")
+            print(f"   Raw response: {response}")
+            print("   📝 Returning empty components")
+            print("="*50 + "\n")
+        
+        return {
+            "situation": "",
+            "task": "",
+            "action": "",
+            "result": ""
+        }
 
 
 class STARState(TypedDict):
@@ -492,7 +367,7 @@ def reformat_llm_response_to_standard(llm_response: str, state: STARState) -> st
     parsed = star_txt_to_json(llm_response)
     if parsed:
         extracted["situation"] = parsed.get("Situation", parsed.get("situation", "")).strip()
-        extracted["task"] = parsed.get("Tasks", parsed.get("Tâches", parsed.get("task", ""))).strip()
+        extracted["task"] = parsed.get("Tasks", parsed.get("s", parsed.get("task", ""))).strip()
         extracted["action"] = parsed.get("Actions", parsed.get("action", "")).strip()
         extracted["result"] = parsed.get("Results", parsed.get("Résultats", parsed.get("result", ""))).strip()
     else:
@@ -997,6 +872,7 @@ async def start():
     cl.user_session.set("saved_star_text", None)
     cl.user_session.set("saved_star_json", None)
     cl.user_session.set("current_element", None)
+    cl.user_session.set("extraction_done", False)  # Track if initial extraction is done
     
     if VERBOSE:
         print(f"\n🚀 New session started")
@@ -1021,9 +897,15 @@ async def main(message: cl.Message):
 
 
 async def handle_workflow_message(message: cl.Message):
-    """Handle regular user messages through the LangGraph workflow"""
+    """Handle regular user messages through the LangGraph workflow.
+    
+    Flow:
+    1. First message: Extract STAR components from job description
+    2. Subsequent messages: Process through LangGraph workflow
+    """
     
     state = cl.user_session.get("state")
+    extraction_done = cl.user_session.get("extraction_done", False)
     
     current_step = state.get("current_step", "gather_info")
     section_to_improve = state.get("section_to_improve")
@@ -1032,20 +914,143 @@ async def handle_workflow_message(message: cl.Message):
         print("\n" + "="*50)
         print("📨 USER MESSAGE RECEIVED")
         print("="*50)
+        print(f"   extraction_done: {extraction_done}")
         print(f"   current_step: {current_step}")
         print(f"   section_to_improve: {section_to_improve}")
         print(f"   user_input: {message.content[:100]}...")
     
+    # --- FIRST MESSAGE: Initial Extraction ---
+    if not extraction_done:
+        if VERBOSE:
+            print("\n🔍 First message - performing initial STAR extraction...")
+        
+        # Store the job description
+        state["job_description"] = message.content
+        
+        # Show processing message
+        processing_msg = await cl.Message(content="🔍 Analyse de votre description en cours...").send()
+        
+        # Extract STAR components from the initial input
+        extracted = await asyncio.to_thread(extract_star_from_text, message.content)
+        
+        # Store extraction result in session
+        cl.user_session.set("initial_extraction", extracted)
+        
+        # Update state with extracted components
+        state["situation"] = extracted.get("situation", "")
+        state["task"] = extracted.get("task", "")
+        state["action"] = extracted.get("action", "")
+        state["result"] = extracted.get("result", "")
+        
+        # Generate initial STAR text from extracted components
+        if any([state["situation"], state["task"], state["action"], state["result"]]):
+            state["current_star_text"] = format_star_text_from_state(state)
+        
+        # Mark extraction as done
+        cl.user_session.set("extraction_done", True)
+        cl.user_session.set("state", state)
+        
+        if VERBOSE:
+            print(f"   ✅ Initial extraction complete")
+            print(f"      situation: {bool(state['situation'])}")
+            print(f"      task: {bool(state['task'])}")
+            print(f"      action: {bool(state['action'])}")
+            print(f"      result: {bool(state['result'])}")
+        
+        # Show the extracted STAR text in the editable panel
+        elem = None
+        if state.get("current_star_text"):
+            elem = await update_editable_text(state["current_star_text"])
+        
+        # Build summary message for the user
+        extracted_sections = []
+        if state["situation"]:
+            extracted_sections.append("Situation ✓")
+        if state["task"]:
+            extracted_sections.append("Tâches ✓")
+        if state["action"]:
+            extracted_sections.append("Actions ✓")
+        if state["result"]:
+            extracted_sections.append("Résultats ✓")
+        
+        missing_sections = []
+        if not state["situation"]:
+            missing_sections.append("Situation")
+        if not state["task"]:
+            missing_sections.append("Tâches")
+        if not state["action"]:
+            missing_sections.append("Actions")
+        if not state["result"]:
+            missing_sections.append("Résultats")
+        
+        extraction_summary = f"""✅ **Extraction initiale terminée !**
+
+**Éléments identifiés :** {', '.join(extracted_sections) if extracted_sections else 'Aucun'}
+"""
+        if missing_sections:
+            extraction_summary += f"\n**Éléments à compléter :** {', '.join(missing_sections)}"
+        
+        extraction_summary += "\n\n📝 Le texte STAR est affiché dans le panneau de droite. Je vais maintenant vous poser quelques questions pour l'améliorer."
+        
+        if elem:
+            await cl.Message(content=extraction_summary, elements=[elem]).send()
+        else:
+            await cl.Message(content=extraction_summary).send()
+        
+        # Now invoke the LangGraph workflow to start the improvement process
+        if VERBOSE:
+            print("\n⚙️ Invoking LangGraph workflow after extraction...")
+        
+        result = await asyncio.to_thread(
+            graph.invoke, 
+            state,
+            config={
+                "run_name": "star_workflow_after_extraction",
+                "metadata": {
+                    "user_id": cl.user_session.get("user_id", user_id),
+                    "session_id": cl.user_session.get("session_id", "unknown"),
+                    "trigger": "initial_extraction",
+                }
+            }
+        )
+        
+        if VERBOSE:
+            print(f"✅ Graph invocation complete after extraction.")
+            print(f"   New step: {result.get('current_step')}")
+            print(f"   section_to_improve: {result.get('section_to_improve')}")
+            print(f"   pending_question: {bool(result.get('pending_question'))}")
+        
+        # Update session state
+        cl.user_session.set("state", result)
+        
+        # Update EditableText if text changed
+        if result.get("current_star_text") and result.get("current_star_text") != state.get("current_star_text"):
+            elem = await update_editable_text(result["current_star_text"])
+        
+        # Send the first question from the workflow
+        if result.get("pending_question"):
+            section_name = result.get("section_to_improve", "").upper() if result.get("section_to_improve") else ""
+            
+            if section_name:
+                question_msg = f"""🔍 **Section {section_name}:**
+
+{result.get('pending_question')}"""
+            else:
+                question_msg = result.get('pending_question')
+            
+            if elem:
+                await cl.Message(content=question_msg, elements=[elem]).send()
+            else:
+                await cl.Message(content=question_msg).send()
+        
+        return
+    
+    # --- SUBSEQUENT MESSAGES: LangGraph Workflow ---
     saved_star = cl.user_session.get("saved_star_text")
     if VERBOSE and saved_star:
         print(f"   📌 Previously saved text available in context")
     
-    if not state.get("job_description"):
-        state["job_description"] = message.content
-        if VERBOSE:
-            print("   → Stored as job_description")
-        
-    elif section_to_improve:
+    if section_to_improve:
         if section_to_improve == "situation":
             state["situation"] = state.get("situation", "") + " " + message.content
             if VERBOSE:
