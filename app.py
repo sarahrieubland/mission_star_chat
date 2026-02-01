@@ -249,6 +249,8 @@ def call_llm(prompt: str, system: str = None, run_name: str = None) -> str:
         print("\n" + "="*50)
         print(f"📤 LLM CALL{f' ({run_name})' if run_name else ''}")
         print("="*50)
+        print(f"🤖 Model: {MODEL_NAME}")
+        print(f"🌡️  Temperature: {TEMPERATURE}")
         print(f"🔧 System: {system[:100]}..." if len(system) > 100 else f"🔧 System: {system}")
         print(f"📝 Prompt: {prompt[:200]}..." if len(prompt) > 200 else f"📝 Prompt: {prompt}")
         print("-"*50)
@@ -335,6 +337,8 @@ def gather_info_node(state: STARState) -> STARState:
     user_edited = state.get("user_edited", False)
     
     # Update STAR text if needed (but not if user just edited)
+    # FIX: Use simple formatting here, NOT LLM generation
+    # LLM generation should only happen in generate_node to avoid multiple reformatting
     if not user_edited:
         has_any_component = any([
             state.get("situation"),
@@ -344,9 +348,10 @@ def gather_info_node(state: STARState) -> STARState:
         ])
         
         if has_any_component:
-            current_star_text = generate_star_text(state)
+            # Use simple formatting to show progress to user
+            current_star_text = format_star_text_from_state(state)
             if VERBOSE:
-                print(f"   📝 Generated STAR text ({len(current_star_text)} chars)")
+                print(f"   📝 Formatted STAR text (simple) ({len(current_star_text)} chars)")
     else:
         if VERBOSE:
             print(f"   📝 Keeping user's saved text unchanged ({len(current_star_text)} chars)")
@@ -499,22 +504,48 @@ def gather_info_node(state: STARState) -> STARState:
 
 
 def generate_star_text(state: STARState) -> str:
-    """Generate STAR text from available components using LLM."""
+    """Generate STAR text from available components using LLM.
+    
+    This function takes RAW user responses and transforms them into polished STAR format.
+    It should only be called from generate_node to avoid multiple reformattings.
+    """
     import re
     
+    # Use the utility function to build components
     components, components_text = build_star_from_components(state)
     
     if not components:
         return format_star_text_from_state(state)
     
     if VERBOSE:
-        print("   📝 GENERATING STAR TEXT FROM:")
-        print(f"      Components: {len(components)}")
+        print("\n" + "="*50)
+        print("   📝 GENERATING STAR TEXT FROM RAW COMPONENTS")
+        print("="*50)
+        print(f"   Number of components: {len(components)}")
+        print(f"   Input length: {len(components_text)} chars")
+        print("-"*50)
+        print("   RAW USER RESPONSES (to be improved):")
+        if state.get("situation"):
+            print(f"   SITUATION: '{state['situation'][:150]}{'...' if len(state.get('situation', '')) > 150 else ''}'")
+        if state.get("task"):
+            print(f"   TÂCHE: '{state['task'][:150]}{'...' if len(state.get('task', '')) > 150 else ''}'")
+        if state.get("action"):
+            print(f"   ACTION: '{state['action'][:150]}{'...' if len(state.get('action', '')) > 150 else ''}'")
+        if state.get("result"):
+            print(f"   RÉSULTAT: '{state['result'][:150]}{'...' if len(state.get('result', '')) > 150 else ''}'")
+        print("-"*50)
+        print("   FORMATTED INPUT TO LLM:")
+        print(f"   {components_text[:300]}{'...' if len(components_text) > 300 else ''}")
+        print("-"*50)
     
     prompt = prompts.GENERATE_STAR_PROMPT.format(input=components_text)
     llm_response = call_llm(prompt, run_name="generate_star_text")
     
     formatted_text = reformat_llm_response_to_standard(llm_response, state)
+    
+    if VERBOSE:
+        print(f"   ✅ Generated text length: {len(formatted_text)} chars")
+        print("="*50 + "\n")
     
     return formatted_text
 
@@ -1501,25 +1532,31 @@ Voici votre texte STAR final :
         questions_per_section = state.get("questions_per_section", {"situation": 0, "task": 0, "action": 0, "result": 0})
         total_questions = state.get("total_questions_asked", 0)
         
+        # FIX: Instead of simple append, add newline separator for cleaner merging
+        # This helps the LLM distinguish between different pieces of information
         if section_to_improve == "situation":
-            state["situation"] = state.get("situation", "") + " " + message.content
+            current = state.get("situation", "").strip()
+            state["situation"] = f"{current}\n{message.content}" if current else message.content
             if VERBOSE:
-                print(f"   → Appended to SITUATION")
+                print(f"   → Added to SITUATION (with separator)")
                 print(f"   Current situation text: {state['situation'][:100]}...")
         elif section_to_improve == "task":
-            state["task"] = state.get("task", "") + " " + message.content
+            current = state.get("task", "").strip()
+            state["task"] = f"{current}\n{message.content}" if current else message.content
             if VERBOSE:
-                print(f"   → Appended to TASK")
+                print(f"   → Added to TASK (with separator)")
                 print(f"   Current task text: {state['task'][:100]}...")
         elif section_to_improve == "action":
-            state["action"] = state.get("action", "") + " " + message.content
+            current = state.get("action", "").strip()
+            state["action"] = f"{current}\n{message.content}" if current else message.content
             if VERBOSE:
-                print(f"   → Appended to ACTION")
+                print(f"   → Added to ACTION (with separator)")
                 print(f"   Current action text: {state['action'][:100]}...")
         elif section_to_improve == "result":
-            state["result"] = state.get("result", "") + " " + message.content
+            current = state.get("result", "").strip()
+            state["result"] = f"{current}\n{message.content}" if current else message.content
             if VERBOSE:
-                print(f"   → Appended to RESULT")
+                print(f"   → Added to RESULT (with separator)")
                 print(f"   Current result text: {state['result'][:100]}...")
         
         # FIX: Set flag to indicate user just answered for this section

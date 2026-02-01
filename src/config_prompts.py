@@ -2,7 +2,7 @@
 Modèles de prompts pour l'agent chatbot STAR.
 
 """
-
+# --- Welcome message (not a prompt) ---
 WELCOME_MESSAGE = """👋 **Bienvenu!**
 
 Je vais vous aider à créer une description de votre mission au format STAR (Situation, Tâches, Actions, Résultats) percutante pour alimenter votre CV.
@@ -60,8 +60,7 @@ Résultats
 """
 #Vous devez toujours respecter les informations fournies par l'utilisateur comme source unique de vérité.
 
-
-# Prompt : extraire STAR 
+# --- Prompt to extract STAR ---
 EXTRACTION_PROMPT = """
 Vous êtes un moteur d'extraction d'information STRICT.
 
@@ -79,6 +78,7 @@ dans le texte fourni, selon le modèle STAR :
 4. N'inventez JAMAIS de résultats, impacts, bénéfices ou objectifs.
 5. Utilisez uniquement les mots ou faits présents dans le texte (reformulation minimale autorisée uniquement pour la clarté grammaticale).
 6. Si le texte est partiel, incomplet ou très court, le JSON doit refléter cette absence d'information.
+7. Conservez le formatting du texte: si il contient des puces, preservez-les. 
 
 📦 FORMAT DE SORTIE :
 - Retournez UNIQUEMENT un JSON valide
@@ -102,6 +102,7 @@ Texte à analyser :
 \"\"\"{input_text}\"\"\"
 """
 
+# --- Prompts to ask improvement questions on each section ---
 SITUATION_PROMPT = """À partir de cette description de mission : "{input}",
 posez à l'utilisateur une question spécifique pour l'aider à décrire la SITUATION.
 Concentrez-vous sur : Quel était le contexte ? Quand et où cela s'est-il passé ? 
@@ -124,14 +125,73 @@ Concentrez-vous sur : Quel a été le résultat ? Peut-il quantifier l'impact ? 
 Et encouragez l'utilisateur à nommer les compétences et connaissances sur lesquelles il s'est appuyé pour ces actions.
 Gardez votre question concise et ciblée."""
 
-GENERATE_STAR_PROMPT = """Créez un description de mission au format STAR soignée et professionnelle 
-basée sur les éléments suivants: {input}
-Ne rajouter pas d'éléments STAR qui n'ont pas été fournis par l'utilisateur. Contentez-vous de reformuler les sections STAR fournies.
-Rédigez un texte cohérent qui s'enchaîne naturellement et serait convaincant pour un futur employeur (maximum 200 mots avec des 
-puces pour la partie Actions et Résultats). Soyez précis et percutant."""
 
-# Add this to your config/prompts.py file:
+# --- Prompt to generate STAR text ---
+GENERATE_STAR_PROMPT = """
+Vous êtes un assistant expert en rédaction professionnelle pour un cabinet de conseil.
 
+Votre mission est de RÉDIGER une description de mission professionnelle au format STAR
+(Situation, Tâches, Actions, Résultats) à partir d'éléments bruts fournis par l'utilisateur.
+
+⚠️ RÈGLES FONDAMENTALES (À RESPECTER STRICTEMENT) :
+1. Vous ne devez JAMAIS inventer, extrapoler ou ajouter d'informations nouvelles
+2. Toutes les informations dans la sortie doivent provenir DIRECTEMENT des éléments fournis
+3. Si une section STAR est absente ou vide dans l'entrée, elle doit rester absente dans la sortie
+4. Vous pouvez reformuler, restructurer, fusionner et améliorer le STYLE, mais PAS le CONTENU
+
+🎯 OBJECTIF DE RÉDACTION :
+Transformer des éléments bruts, potentiellement redondants ou mal structurés, en une description STAR claire, fluide, professionnelle et convaincante.
+
+✍️ CONSIGNES DE RÉÉCRITURE (CRITIQUE) :
+❌ NE PAS simplement juxtaposer ou concaténer les phrases fournies
+✅ FUSIONNER intelligemment les informations redondantes ou complémentaires
+✅ ÉLIMINER les répétitions et les formulations maladroites
+✅ RÉORGANISER pour créer un récit cohérent et fluide
+✅ CLARIFIER les responsabilités, actions et résultats
+✅ AMÉLIORER la lisibilité et l'impact professionnel
+✅ Utiliser un ton factuel, précis et orienté valeur
+
+📋 TRAITEMENT DES ÉLÉMENTS AVEC SAUTS DE LIGNE :
+Les éléments fournis peuvent contenir plusieurs informations séparées par des sauts de ligne.
+
+Votre rôle :
+- Identifier les informations complémentaires vs redondantes
+- Fusionner intelligemment sans perdre de détails
+- Restructurer en phrases complètes et cohérentes
+- Éliminer les sauts de ligne maladroits
+
+📐 FORMAT DE SORTIE :
+
+Situation  
+Maximum 2-3 phrases décrivant le contexte, le problème ou le besoin
+
+Tâches  
+Maximum 2-3 phrases décrivant vos responsabilités et objectifs
+
+Actions  
+5 à 10 puces (selon le contenu fourni)
+Chaque puce : verbe d'action + complément
+
+Résultats  
+Maximum 5 puces (selon le contenu fourni)
+Privilégier les éléments quantifiés
+
+🛑 RAPPELS :
+- Fidélité absolue aux informations fournies
+- Zéro invention, zéro extrapolation
+- Une section vide est une réponse correcte
+- FUSION intelligente, pas juxtaposition
+- Qualité > Quantité
+
+📝 Éléments fournis :
+{input}
+
+Générez la description STAR en FUSIONNANT intelligemment les éléments.
+Transformez les fragments en récit cohérent et professionnel.
+"""
+
+
+# --- Evaluation Prompt ---
 EVALUATE_PROMPT = """Évaluez cette descrition de mission au format STAR et décidez si elle est satisfaisante :
 
 {input}
