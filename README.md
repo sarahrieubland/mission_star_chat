@@ -36,8 +36,11 @@ LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=
 
 # App parameters
-MODEL_NAME=gpt-4
-TEMPERATURE=0.01
+MODEL_NAME=gpt-4.1-mini
+TEMP_QUESTIONS=0.1
+TEMP_EVALUATION=0.1
+TEMP_GENERATION=0.01
+TEMP_EXTRACTION=0.01
 VERBOSE=True
 MAX_QUESTIONS_PER_SECTION=4
 MAX_TOTAL_QUESTIONS=12
@@ -73,20 +76,35 @@ chainlit run app.py -w
 
 ## 5. Langgraph workflow for the agentic chatbot
 
-gather_info → generate → evaluate 
-                           ↓
-              ┌────────────┴────────────┐
-              ↓                         ↓
-         complete              section_to_improve set
-                                        ↓
-                               gather_info (asks specific section prompt)
-                                        ↓
-                                    generate
-                                        ↓
-                                    evaluate
-                                        ↓
-                                      ...
+Below is a simplified version of the graph implemented with LangGraph in the code for the agent workflow. 
 
+```mermaid
+---
+config:
+  layout: dagre
+  look: neo
+  theme: default
+---
+flowchart TB
+    UserStartMessage(["User Sends Message"]) --> ExtractNode["LLM extract STAR Components<br>from Job Description"]
+    ExtractNode --> UserConfirmation(["User Confirmation"])
+    UserConfirmation -- Yes --> Evaluate["Evaluate node<br>LLM Evaluates Quality"]
+    UserConfirmation -- No --> End["End"]
+    Evaluate --> Satisfactory{"is satisfactory?<br>+ section to improve<br>S,T,A or R"}
+    Satisfactory -- Yes --> End
+    Satisfactory -- No --> GatherInfo["Gather Info node<br>LLM asks question<br> on Section STA or R"]
+    GatherInfo --> UserAnswer(["User Answer <br>on section STA or R"])
+    UserAnswer --> Generate["Generate node<br>LLM improves section STA or R"]
+    Generate --> Evaluate
+
+    style UserStartMessage fill:#fff3bf,stroke:#f08c00,stroke-width:2px
+    style UserConfirmation fill:#fff3bf,stroke:#f08c00,stroke-width:2px
+    style Evaluate fill:#4dabf7,stroke:#1971c2,stroke-width:2px
+    style End fill:#51cf66,stroke:#2f9e44,stroke-width:2px
+    style GatherInfo fill:#4dabf7,stroke:#1971c2,stroke-width:2px
+    style UserAnswer fill:#fff3bf,stroke:#f08c00,stroke-width:2px
+    style Generate fill:#4dabf7,stroke:#1971c2,stroke-width:2px
+```
 
 ## 6. (Optional) Cloudflare tunnel for development 
 
