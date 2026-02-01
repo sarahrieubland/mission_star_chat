@@ -5,3 +5,4 @@ venv/
 *older_versions_not_git/
 *.vscode/
 .python-version
+.files/

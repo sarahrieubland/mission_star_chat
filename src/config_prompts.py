@@ -10,7 +10,8 @@ Je vais vous aider à créer une description de votre mission au format STAR (Si
 **Pour commencer, décrivez une expérience professionnelle, mission, ou une réalisation 
 que vous souhaitez transformer au format STAR.**
 
-Vous pouvez également insérer un brouillon ou un texte qui decrit votre mission."""
+Vous pouvez également insérer un brouillon ou un texte qui decrit votre mission.
+"""
 
 #Par exemple : "J'ai dirigé un projet pour améliorer la satisfaction client dans mon entreprise" 
 #ou "J'ai résolu un problème technique majeur lors d'un lancement de produit".
@@ -26,7 +27,7 @@ mettant en valeur leurs compétences et leurs réalisations. Soyez encourageant,
 les détails les plus marquants de leurs expériences.
 
 Lors de la géneration, veuillez reformuler tout en restant fidéle aux informations données par les utilisateurs 
-et ne pas rajouter d'informations nouvelles.
+et ne pas rajouter d'informations nouvelles. 
 
 Description du format STAR souhaité:
 - Situation : Plantez le contexte de votre mission, votre employeur et leurs enjeux en maximum 2 phrases.
@@ -57,34 +58,48 @@ Résultats
 - Un cadre de gouvernance défini, facilitant la mise en œuvre, le pilotage et la conformité future.
 - Une feuille de route opérationnelle permettant au département d'engager son projet en toute sécurité et avec une trajectoire maîtrisée.
 """
+#Vous devez toujours respecter les informations fournies par l'utilisateur comme source unique de vérité.
+
 
 # Prompt : extraire STAR 
 EXTRACTION_PROMPT = """
-Vous êtes un assistant qui transforme une description de mission ou de travail en un objet JSON 
-structuré selon le modèle STAR (Situation, Task, Action, Result).
+Vous êtes un moteur d'extraction d'information STRICT.
 
-Consignes :
-- Retournez UNIQUEMENT du JSON valide, sans texte additionnel.
-- Le JSON doit contenir exactement les clés suivantes : "situation", "task", "action", "result".
-- Chaque clé doit contenir une chaîne de caractères bien formulée et n'exédant pas 2-3 phrases.
-- Si une information n'est pas mentionnée, laissez la valeur vide ("").
-- Évitez toute reformulation inutile : soyez précis, factuel et synthétique.
+Votre rôle est UNIQUEMENT d'identifier et classer les informations EXPLICITEMENT présentes
+dans le texte fourni, selon le modèle STAR :
+- Situation
+- Task
+- Action
+- Result
 
-Exemple d'entrée :
-"J'ai piloté la refonte du système d'information logistique d'un grand groupe de distribution,
-en coordonnant les équipes techniques et métiers, et en assurant la mise en production dans les délais."
+⚠️ RÈGLES ABSOLUES (À RESPECTER STRICTEMENT) :
+1. N'ajoutez AUCUNE information qui n'est pas explicitement mentionnée dans le texte.
+2. N'inférez PAS, ne déduisez PAS, ne reformulez PAS de manière interprétative.
+3. Si une information n'est pas clairement présente dans le texte, laissez la valeur vide ("").
+4. N'inventez JAMAIS de résultats, impacts, bénéfices ou objectifs.
+5. Utilisez uniquement les mots ou faits présents dans le texte (reformulation minimale autorisée uniquement pour la clarté grammaticale).
+6. Si le texte est partiel, incomplet ou très court, le JSON doit refléter cette absence d'information.
 
-Exemple de sortie :
-{{
-  "situation": "Le système d'information logistique du client était obsolète et mal intégré aux autres outils.",
-  "task": "Piloter la refonte du système d'information pour améliorer la fiabilité et l'efficacité opérationnelle.",
-  "action": "Coordination des équipes techniques et métiers, suivi du planning et du budget, pilotage du déploiement et des tests.",
-  "result": "Mise en production réussie dans les délais, amélioration de la performance logistique et satisfaction du client."
-}}
+📦 FORMAT DE SORTIE :
+- Retournez UNIQUEMENT un JSON valide
+- AUCUN texte explicatif, commentaire ou markdown
+- Le JSON doit contenir EXACTEMENT les clés suivantes :
+  "situation", "task", "action", "result"
+- Chaque valeur est une chaîne de caractères (ou une chaîne vide "")
+- Maximum 2 phrases par champ
 
-Maintenant, convertissez cette entrée en JSON au format STAR :
+📌 DÉFINITION DES CHAMPS (POUR CLASSIFICATION UNIQUEMENT) :
+- "situation" : Contexte ou état initial EXPLICITEMENT mentionné
+- "task" : Responsabilité, mission ou objectif EXPLICITEMENT mentionné
+- "action" : Actions réellement effectuées et EXPLICITEMENT décrites
+- "result" : Résultats ou effets EXPLICITEMENT indiqués (chiffres, livrables, succès, échecs)
 
-{input_text}
+🛑 RAPPEL IMPORTANT :
+- L'absence d'information est une réponse valide.
+- Un champ vide ("") est préférable à une information inventée.
+
+Texte à analyser :
+\"\"\"{input_text}\"\"\"
 """
 
 SITUATION_PROMPT = """À partir de cette description de mission : "{input}",

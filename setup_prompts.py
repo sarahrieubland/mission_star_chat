@@ -34,7 +34,7 @@ if not os.getenv("LANGSMITH_API_KEY"):
 # Import after loading env vars
 try:
     from langsmith import Client
-    from prompt_manager import push_all_prompts_to_hub
+    from src.prompt_manager import push_all_prompts_to_hub
 except ImportError as e:
     print(f"❌ Error importing required modules: {e}")
     print("\nPlease install required packages:")
