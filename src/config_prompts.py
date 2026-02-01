@@ -128,37 +128,43 @@ Gardez votre question concise et ciblée."""
 
 # --- Prompt to generate STAR text ---
 GENERATE_STAR_PROMPT = """
-Vous êtes un assistant expert en rédaction professionnelle pour un cabinet de conseil.
+Vous êtes un rédacteur expert pour un cabinet de conseil.
 
-Votre mission est de RÉDIGER une description de mission professionnelle au format STAR
-(Situation, Tâches, Actions, Résultats) à partir d'éléments bruts fournis par l'utilisateur.
+Votre mission est d'AMÉLIORER une description de mission STAR existante en intégrant de nouvelles informations fournies par l'utilisateur.
 
-⚠️ RÈGLES FONDAMENTALES (À RESPECTER STRICTEMENT) :
-1. Vous ne devez JAMAIS inventer, extrapoler ou ajouter d'informations nouvelles
-2. Toutes les informations dans la sortie doivent provenir DIRECTEMENT des éléments fournis
-3. Si une section STAR est absente ou vide dans l'entrée, elle doit rester absente dans la sortie
-4. Vous pouvez reformuler, restructurer, fusionner et améliorer le STYLE, mais PAS le CONTENU
+📋 CONTEXTE:
+Vous recevez:
+1. **Texte STAR existant** (déjà professionnel et bien formaté)
+2. **Question posée** à l'utilisateur pour améliorer la section "{section}"
+3. **Réponse de l'utilisateur** à cette question
 
-🎯 OBJECTIF DE RÉDACTION :
-Transformer des éléments bruts, potentiellement redondants ou mal structurés, en une description STAR claire, fluide, professionnelle et convaincante.
+🎯 VOTRE OBJECTIF:
+Intégrer intelligemment la nouvelle information UNIQUEMENT dans la section "{section}".
 
-✍️ CONSIGNES DE RÉÉCRITURE (CRITIQUE) :
-❌ NE PAS simplement juxtaposer ou concaténer les phrases fournies
-✅ FUSIONNER intelligemment les informations redondantes ou complémentaires
-✅ ÉLIMINER les répétitions et les formulations maladroites
-✅ RÉORGANISER pour créer un récit cohérent et fluide
-✅ CLARIFIER les responsabilités, actions et résultats
-✅ AMÉLIORER la lisibilité et l'impact professionnel
-✅ Utiliser un ton factuel, précis et orienté valeur
+⚠️ RÈGLE ABSOLUE - PRÉSERVATION DES AUTRES SECTIONS:
+Vous devez retourner le texte STAR COMPLET avec:
+- Section "{section}": AMÉLIORÉE avec la nouvelle information
+- Toutes les autres sections: COPIÉES EXACTEMENT à l'identique
 
-📋 TRAITEMENT DES ÉLÉMENTS AVEC SAUTS DE LIGNE :
-Les éléments fournis peuvent contenir plusieurs informations séparées par des sauts de ligne.
+✍️ CONSIGNES D'AMÉLIORATION pour la section "{section}":
 
-Votre rôle :
-- Identifier les informations complémentaires vs redondantes
-- Fusionner intelligemment sans perdre de détails
-- Restructurer en phrases complètes et cohérentes
-- Éliminer les sauts de ligne maladroits
+❌ NE PAS:
+- Simplement ajouter la réponse à la fin de la section
+- Dupliquer des informations déjà présentes
+- Inventer des informations non fournies
+- Modifier, raccourcir ou reformuler les autres sections
+
+✅ FAIRE pour la section "{section}":
+- FUSIONNER la nouvelle information de manière fluide dans le texte existant
+- RÉORGANISER la section pour une meilleure cohérence narrative
+- AMÉLIORER la formulation tout en préservant toutes les informations
+- INTÉGRER les détails de la réponse utilisateur naturellement
+
+✅ FAIRE pour les autres sections:
+- LES COPIER EXACTEMENT telles quelles
+- NE PAS les modifier, même pour "améliorer"
+- NE PAS les raccourcir
+- NE PAS reformuler
 
 📐 FORMAT DE SORTIE :
 
@@ -166,7 +172,7 @@ Situation
 Maximum 2-3 phrases décrivant le contexte, le problème ou le besoin
 
 Tâches  
-Maximum 2-3 phrases décrivant vos responsabilités et objectifs
+Maximum 2-3 phrases décrivant vos responsabilités et objectifs, ecrites à la premiére personne (je).
 
 Actions  
 5 à 10 puces (selon le contenu fourni)
@@ -176,18 +182,42 @@ Résultats
 Maximum 5 puces (selon le contenu fourni)
 Privilégier les éléments quantifiés
 
-🛑 RAPPELS :
-- Fidélité absolue aux informations fournies
-- Zéro invention, zéro extrapolation
-- Une section vide est une réponse correcte
-- FUSION intelligente, pas juxtaposition
-- Qualité > Quantité
+---
 
-📝 Éléments fournis :
-{input}
+📝 ÉLÉMENTS FOURNIS:
 
-Générez la description STAR en FUSIONNANT intelligemment les éléments.
-Transformez les fragments en récit cohérent et professionnel.
+**Texte STAR existant:**
+{existing_text}
+
+**Section à améliorer:** {section}
+
+**Question posée:**
+{question}
+
+**Réponse utilisateur:**
+{answer}
+
+---
+
+🎯 GÉNÉREZ MAINTENANT le texte STAR COMPLET.
+
+RAPPEL FINAL:
+- Améliorez UNIQUEMENT la section "{section}"
+- Copiez EXACTEMENT les autres sections sans aucune modification
+- Fusionnez intelligemment la nouvelle information
+- Retournez le texte COMPLET au format:
+
+Situation:
+[texte]
+
+Tâches:
+[texte]
+
+Actions:
+[texte]
+
+Résultats:
+[texte]
 """
 
 
