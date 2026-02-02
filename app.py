@@ -1,14 +1,6 @@
 """
 STAR Text Generator - Agentic Workflow with LangGraph and Chainlit
 
-REDESIGNED GENERATION APPROACH:
-Instead of appending user answers to state, we now pass 3 inputs to generation:
-1. Existing STAR text (from previous iteration)
-2. Question that was asked
-3. User's answer to that question
-
-This allows the LLM to intelligently integrate new information into existing text.
-
 Features:
 - LangGraph agentic workflow for gathering and improving STAR components
 - Editable side panel showing the current STAR text at EVERY step
