@@ -1,6 +1,14 @@
 """
 STAR Text Generator - Agentic Workflow with LangGraph and Chainlit
 
+REDESIGNED GENERATION APPROACH:
+Instead of appending user answers to state, we now pass 3 inputs to generation:
+1. Existing STAR text (from previous iteration)
+2. Question that was asked
+3. User's answer to that question
+
+This allows the LLM to intelligently integrate new information into existing text.
+
 Features:
 - LangGraph agentic workflow for gathering and improving STAR components
 - Editable side panel showing the current STAR text at EVERY step
@@ -860,9 +868,10 @@ async def update_editable_text(star_text: str):
 
 @on_star_text_saved
 async def handle_save_action(saved_text: str):
-    """Handle user edits."""
+    """Handle user edits and continue workflow."""
     if VERBOSE:
         print("\n💾 STAR TEXT SAVED BY USER")
+        print(f"   Saved text length: {len(saved_text)} chars")
     
     cl.user_session.set("saved_star_text", saved_text)
     
@@ -870,17 +879,85 @@ async def handle_save_action(saved_text: str):
     
     state = cl.user_session.get("state")
     if state:
+        # Check if there was a pending question - if so, mark it as answered
+        section_being_answered = state.get("section_to_improve")
+        had_pending_question = state.get("pending_question") is not None
+        
+        if VERBOSE and section_being_answered:
+            print(f"   📝 User saving answer for section: {section_being_answered.upper()}")
+            print(f"   Previous question: {state.get('pending_question', '')[:100]}...")
+        
+        # Update raw fields with user's edits
         state["situation_raw"] = components.get("situation", "")
         state["task_raw"] = components.get("task", "")
         state["action_raw"] = components.get("action", "")
         state["result_raw"] = components.get("result", "")
         state["current_star_text"] = saved_text
         state["user_edited"] = True
-        state["skip_generate"] = True
+        
+        # CRITICAL FIX: If there was a pending question, mark it as answered
+        if section_being_answered and had_pending_question:
+            state["user_just_answered_for_section"] = section_being_answered
+            state["last_question_asked"] = state.get("pending_question", "")
+            state["last_answer_given"] = f"User edited and saved the {section_being_answered} section"
+            state["last_section_improved"] = section_being_answered
+            state["pending_question"] = None
+            state["skip_generate"] = False  # Don't skip - we need to integrate the changes
+            
+            if VERBOSE:
+                print(f"   ✅ Marked {section_being_answered} as answered via save")
+        else:
+            # No pending question - just a general edit
+            state["skip_generate"] = True  # Skip generation for general edits
+            
+            if VERBOSE:
+                print(f"   ✅ General edit (no pending question)")
         
         cl.user_session.set("state", state)
-    
-    await cl.Message(content="✅ Modifications sauvegardées!").send()
+        
+        if VERBOSE:
+            print(f"   State updated with user edits")
+            print(f"   situation_raw: {len(state['situation_raw'])} chars")
+            print(f"   task_raw: {len(state['task_raw'])} chars")
+            print(f"   action_raw: {len(state['action_raw'])} chars")
+            print(f"   result_raw: {len(state['result_raw'])} chars")
+        
+        # Send confirmation
+        await cl.Message(content="✅ Modifications sauvegardées!").send()
+        
+        # Automatically continue the workflow with the edited text
+        if VERBOSE:
+            print("   🔄 Continuing workflow with user-edited text...")
+        
+        result = await asyncio.to_thread(graph.invoke, state)
+        cl.user_session.set("state", result)
+        
+        elem = cl.user_session.get("current_element")
+        if result.get("current_star_text"):
+            elem = await update_editable_text(result["current_star_text"])
+        
+        # Check if workflow completed
+        if result.get("current_step") == "complete" or result.get("is_satisfactory"):
+            final_message = f"🎉 **Mission STAR terminée !**\n\nVoici votre texte finalisé :\n\n{result.get('current_star_text', '')}"
+            if elem:
+                await cl.Message(content=final_message, elements=[elem]).send()
+            else:
+                await cl.Message(content=final_message).send()
+        elif result.get("pending_question"):
+            questions_left = MAX_TOTAL_QUESTIONS - result.get("total_questions_asked", 0)
+            
+            # Only show questions remaining if VERBOSE
+            if VERBOSE:
+                question_msg = f"{result.get('pending_question')}\n\n💡 ({questions_left} questions restantes)"
+            else:
+                question_msg = result.get('pending_question')
+            
+            if elem:
+                await cl.Message(content=question_msg, elements=[elem]).send()
+            else:
+                await cl.Message(content=question_msg).send()
+    else:
+        await cl.Message(content="✅ Modifications sauvegardées!").send()
 
 
 @cl.password_auth_callback
@@ -968,6 +1045,34 @@ async def handle_workflow_message(message: cl.Message):
             print(f"\n📦 EXTRACTED DATA:")
             for key, value in extracted.items():
                 print(f"   {key}: {len(value) if value else 0} chars - {value[:80] if value else '(empty)'}...")
+        
+        # Check if extraction failed (all fields empty or very short)
+        total_extracted = sum(len(v) for v in extracted.values())
+        has_meaningful_content = any(len(v) > 50 for v in extracted.values())
+        
+        if total_extracted < 100 or not has_meaningful_content:
+            # Extraction failed - input too short or not relevant
+            if VERBOSE:
+                print(f"\n⚠️ EXTRACTION FAILED - total extracted: {total_extracted} chars")
+                print(f"   has_meaningful_content: {has_meaningful_content}")
+            
+            error_message = """❌ **Extraction impossible**
+
+Votre message semble trop court ou ne contient pas assez d'informations pour créer une description STAR.
+
+📝 **Veuillez insérer une description d'une expérience professionnelle, mission, ou une réalisation que vous souhaitez transformer au format STAR.**
+
+**Exemple de contenu attendu :**
+- Le contexte de votre mission (Situation)
+- Vos responsabilités (Tâches)
+- Les actions concrètes menées (Actions)
+- Les résultats obtenus (Résultats)
+
+Vous pouvez fournir un texte libre, formaté ou non. Merci de réessayer avec plus de détails ! 🙏"""
+            
+            await cl.Message(content=error_message).send()
+            # Don't set extraction_done so user can try again
+            return
         
         # Store in raw fields
         state["situation_raw"] = extracted.get("situation", "")

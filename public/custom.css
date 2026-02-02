@@ -23,3 +23,23 @@ div[class*="chat"] {
 form {
     max-width: 100% !important;
 }
+
+/* CRITICAL FIX: Override Tailwind's z-50 class for dialogs */
+#new-chat-dialog,
+[role="dialog"],
+div[class*="z-50"][role="dialog"] {
+    z-index: 9999 !important;
+}
+
+/* Dialog backdrop - also override z-50 */
+div[class*="z-50"][class*="inset-0"],
+div[class*="z-50"][class*="bg-black"] {
+    z-index: 9998 !important;
+}
+
+/* Ensure EditableText stays below dialogs */
+.fixed[style*="left: 50vw"],
+div[style*="left: 50vw"][style*="z-index"],
+div.fixed.flex[style*="50vw"] {
+    z-index: 100 !important;
+}

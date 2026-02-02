@@ -67,12 +67,13 @@ python3 src/setup_prompts.py
 ```
 Prompts can be either edited locally or directly from LangSmith UI. 
 
-## 4. Run chainlit app
+## 4. Chainlit 
+To run the chainlit app:
 
 ```
 chainlit run app.py -w
 ```
-
+Some js elements were added to the standard chainlit app elements : see `public/custom.css` and `public/elements/EditableText.jsx`
 
 ## 5. Langgraph workflow for the agentic chatbot
 
@@ -124,4 +125,6 @@ On https://dashboard.render.com/, to create the web service. This is currently b
 To access the application : https://mission-star-chat.onrender.com 
 
 To authenticate, enter the username and password provided separately.
+
+Deployment is set to occur on commits to the dev branch. Make sure to add/correct environment variables set in the `.env` locally in the 'Environement' section on Render. 
 
