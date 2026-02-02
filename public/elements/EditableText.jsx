@@ -192,7 +192,7 @@ export default function EditableText() {
         right: 0, 
         top: 0,
         bottom: 0,
-        zIndex: 1000,
+        zIndex: 100,  // REDUCED from 1000 to 100 so dialogs appear on top
         backgroundColor: 'var(--background)'
       }}
     >

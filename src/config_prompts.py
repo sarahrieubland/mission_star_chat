@@ -114,12 +114,12 @@ posez à l'utilisateur une question spécifique pour l'aider à articuler les T�
 Concentrez-vous sur : Quelle était sa responsabilité précise ? Quel objectif cherchait-il à atteindre ?
 Gardez votre question concise et ciblée."""
 
-ACTION_PROMPT = """À partir de cette description de mission : "{input}, 
+ACTION_PROMPT = """À partir de cette description de mission : "{input}", 
 posez à l'utilisateur une question spécifique pour l'aider à décrire les ACTIONS qu'il a entreprises.
 Concentrez-vous sur : Quelles étapes spécifiques a-t-il suivies ? Comment a-t-il abordé le problème ?
 Gardez votre question concise et ciblée."""
 
-RESULT_PROMPT = """À partir de cette description de mission : "{input},
+RESULT_PROMPT = """À partir de cette description de mission : "{input}",
 posez à l'utilisateur une question spécifique pour l'aider à articuler les RÉSULTATS.
 Concentrez-vous sur : Quel a été le résultat ? Peut-il quantifier l'impact ? Quel est le bénéfice pour l'empoyeur ?
 Et encouragez l'utilisateur à nommer les compétences et connaissances sur lesquelles il s'est appuyé pour ces actions.
