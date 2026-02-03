@@ -1,13 +1,14 @@
-/* Force the main app container to use flexbox layout */
-#root {
+/* Only apply 50% width constraint when NOT on login page */
+/* Login page doesn't have the chat container, so we can target that */
+#root:has([data-testid="chat-message-container"]) {
     display: flex !important;
     width: 100vw !important;
     height: 100vh !important;
     overflow: hidden !important;
 }
 
-/* Target the main content area - adjust the max-width */
-#root > div {
+/* Target the main content area - only when chat is active */
+#root:has([data-testid="chat-message-container"]) > div {
     max-width: 50vw !important;
     width: 50vw !important;
     flex-shrink: 0 !important;
@@ -19,8 +20,8 @@ div[class*="chat"] {
     max-width: 100% !important;
 }
 
-/* Keep input area in left half */
-form {
+/* Keep input area in left half - only in chat view */
+#root:has([data-testid="chat-message-container"]) form {
     max-width: 100% !important;
 }
 
